@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "CannaGrow",
-    "slug": "cannagrow",
+    "name": "Phynix",
+    "slug": "phynix",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "cannagrow",
+    "scheme": "phynix",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.cannagrow"
+      "bundleIdentifier": "com.phynix.app"
     },
     "android": {
-      "package": "com.cannagrow",
+      "package": "com.phynix.app",
       "adaptiveIcon": {
         "backgroundColor": "#0d1a0f",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
