@@ -16,7 +16,7 @@ A comprehensive cannabis growing mobile app built with Expo React Native. Covers
 ### 5 Tabs:
 1. **Home** — Daily grow tips, quick reference stats, growth cycle overview, environment targets, gamification level/XP/achievements (78 achievements, 30 levels)
 2. **Guides** — Complete grow guides + encyclopedia (segment toggle: Guides / Encyclopedia)
-3. **My Grows** — Track unlimited grows with stages, notes/log, equipment wizard, multi-photo uploads, light schedules, virtual plant companion, quick action buttons (water/nutrients/transplant/node/bud), harvest/drying/curing tracking with progress bars and burp schedule
+3. **My Grows** — Track unlimited grows with 5-step setup wizard (Basics, Seeds & Space, Medium, Lighting, Timeline), customizable grow environments (tent/room/closet/window/balcony/garden/field/greenhouse), seed source/type tracking, medium brand, pot type/size, water type, pH method, stages, notes/log, multi-photo uploads, light schedules, virtual plant companion with environment-specific visuals, quick action buttons (water/nutrients/transplant/node/bud), harvest/drying/curing tracking with progress bars and burp schedule
 4. **Analyze** — Comprehensive AI plant diagnostics: sex identification, 12-nutrient analysis, pest/disease detection, water/light/root health, trichome staging, training techniques, troubleshooting guide
 5. **Community** — Social feed (likes, comments, follows, shares, reposts), grower profiles, profile pictures (real photos), user search, Everyone/Following filter
 
@@ -42,12 +42,18 @@ The analyzer provides exhaustive plant diagnostics:
 - Daily streak tracking
 - Stored in AsyncStorage under "phynix_gamification_v1"
 
-## Virtual Plant System
+## Virtual Plant & Environment System
 - Realistic cannabis plant visualization with 10 distinct stages
 - Cannabis fan leaves with pointed leaflets, bud clusters with pistil hairs and trichome dots
 - Grow action effects: watering darkens soil, nutrients darken leaves, transplant enlarges pot, node/bud counts
 - Health indicator based on care frequency
 - Animated with react-native-reanimated
+- **8 Environment Types**: Indoor Tent, Indoor Room, Closet, Window Sill, Balcony, Outdoor Garden, Outdoor Field, Greenhouse
+  - Each renders a unique visual scene (tent frame, room corner, window with sunlight, sky gradient, railing, greenhouse glass panels, etc.)
+  - Outdoor Field shows background plant silhouettes when plantCount > 5
+  - Indoor environments show light fixtures and fans
+- Medium-specific pot colors (soil brown, coco reddish, hydro blue, rockwool gray, clay pebbles dots)
+- Light fixture types: LED panel, HPS bulb, CMH/LEC, CFL/T5 tubes, Natural/sun icon
 
 ## Harvest/Drying/Curing System
 - **Harvest**: Auto-records date, prompts for wet weight, awards 50 XP

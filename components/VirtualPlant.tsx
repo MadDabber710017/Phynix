@@ -31,6 +31,9 @@ interface VirtualPlantProps {
   medium?: string;
   fanType?: string;
   lightSchedule?: string;
+  growEnvironment?: string;
+  plantCount?: number;
+  potType?: string;
 }
 
 const STAGE_INDEX: Record<string, number> = {
@@ -543,6 +546,29 @@ function HangingPlant() {
   );
 }
 
+function BackgroundPlantSilhouette({ x, height }: { x: number; height: number }) {
+  return (
+    <View style={{ position: "absolute", bottom: 0, left: x, alignItems: "center" }}>
+      <View style={{ width: 2, height: height, backgroundColor: "rgba(76,175,80,0.25)", borderRadius: 1 }} />
+      <View style={{ position: "absolute", bottom: height * 0.6, left: -3, width: 6, height: 4, borderRadius: 2, backgroundColor: "rgba(76,175,80,0.2)", transform: [{ rotate: "-30deg" }] }} />
+      <View style={{ position: "absolute", bottom: height * 0.4, right: -3, width: 6, height: 4, borderRadius: 2, backgroundColor: "rgba(76,175,80,0.2)", transform: [{ rotate: "30deg" }] }} />
+    </View>
+  );
+}
+
+function PlantCountIndicator({ count }: { count: number }) {
+  if (count <= 1) return null;
+  const dots = Math.min(count, 9);
+  return (
+    <View style={{ position: "absolute", bottom: 4, right: 8, flexDirection: "row", gap: 3, backgroundColor: "rgba(0,0,0,0.4)", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 8, zIndex: 12 }}>
+      {Array.from({ length: dots }).map((_, i) => (
+        <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#66bb6a" }} />
+      ))}
+      {count > 9 && <Text style={{ fontSize: 8, color: "#aaa", fontFamily: "Nunito_400Regular" }}>+</Text>}
+    </View>
+  );
+}
+
 export default function VirtualPlant({
   stage,
   noteCount = 0,
@@ -560,6 +586,9 @@ export default function VirtualPlant({
   medium,
   fanType,
   lightSchedule,
+  growEnvironment,
+  plantCount = 1,
+  potType,
 }: VirtualPlantProps) {
   const stageIdx = STAGE_INDEX[stage] ?? 2;
   const healthColor = getHealthColor(daysSinceLastLog, recentLogCount);
@@ -571,8 +600,9 @@ export default function VirtualPlant({
   const soilColor = mediumColor;
   const potScale = transplants > 0 ? 1 + Math.min(transplants * 0.08, 0.3) : 1;
 
-  const showTent = !!(lightType || tentSize || medium || fanType || lightSchedule);
+  const showTent = !!(lightType || tentSize || medium || fanType || lightSchedule || growEnvironment);
   const outdoor = isOutdoor(lightType);
+  const env = (growEnvironment || "").toLowerCase();
   const hydro = isHydroMedium(medium);
 
   const visibleNodes = stageIdx <= 1 ? 0 : Math.min(nodeCount > 0 ? nodeCount : Math.max(2, stageIdx), 8);
@@ -817,48 +847,244 @@ export default function VirtualPlant({
     </>
   );
 
-  return (
-    <View style={vpStyles.card}>
-      {showTent ? (
-        outdoor ? (
-          <View style={[vpStyles.plantScene, { height: 220 }]}>
-            <View style={tentStyles.outdoorSky}>
-              <View style={tentStyles.skyGradient1} />
-              <View style={tentStyles.skyGradient2} />
+  const renderEnvironmentScene = () => {
+    if (env.includes("window")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "#2a2a3e" }]}>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 100, backgroundColor: "#fdd835", opacity: 0.08 }} />
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 50, backgroundColor: "#fff9c4", opacity: 0.1 }} />
+          <View style={{ position: "absolute", top: 10, left: 20, right: 20, height: 130, borderWidth: 3, borderColor: "#5d4037", borderRadius: 4 }}>
+            <View style={{ position: "absolute", top: 0, bottom: 0, left: "48%", width: 3, backgroundColor: "#5d4037" }} />
+            <View style={{ position: "absolute", left: 0, right: 0, top: "48%", height: 3, backgroundColor: "#5d4037" }} />
+            <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "#87ceeb", opacity: 0.1, borderRadius: 2 }} />
+          </View>
+          <View style={{ position: "absolute", bottom: 38, left: 10, right: 10, height: 4, backgroundColor: "#5d4037", borderRadius: 2 }} />
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
             </View>
-            <View style={tentStyles.sunIcon}>
-              <Ionicons name="sunny" size={22} color="#ffd54f" />
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("balcon")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220 }]}>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 100 }}>
+            <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 50, backgroundColor: "#64b5f6", opacity: 0.25 }} />
+            <View style={{ position: "absolute", top: 50, left: 0, right: 0, height: 50, backgroundColor: "#bbdefb", opacity: 0.15 }} />
+          </View>
+          <View style={tentStyles.sunIcon}>
+            <Ionicons name="sunny" size={20} color="#ffd54f" />
+          </View>
+          <View style={{ position: "absolute", bottom: 34, left: 0, right: 0, height: 3, backgroundColor: "#455a64" }} />
+          <View style={{ position: "absolute", bottom: 34, left: 0, width: 3, height: 50, backgroundColor: "#546e7a" }} />
+          <View style={{ position: "absolute", bottom: 34, right: 0, width: 3, height: 50, backgroundColor: "#546e7a" }} />
+          <View style={{ position: "absolute", bottom: 54, left: 0, right: 0, height: 2, backgroundColor: "#546e7a", opacity: 0.7 }} />
+          <View style={{ position: "absolute", bottom: 44, left: 0, right: 0, height: 2, backgroundColor: "#546e7a", opacity: 0.5 }} />
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
             </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("outdoor garden")) {
+      const bgPlants = plantCount > 1 ? Math.min(plantCount - 1, 6) : 0;
+      return (
+        <View style={[vpStyles.plantScene, { height: 220 }]}>
+          <View style={tentStyles.outdoorSky}>
+            <View style={tentStyles.skyGradient1} />
+            <View style={tentStyles.skyGradient2} />
+          </View>
+          <View style={tentStyles.sunIcon}>
+            <Ionicons name="sunny" size={22} color="#ffd54f" />
+          </View>
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, backgroundColor: "#3e2723", borderTopLeftRadius: 4, borderTopRightRadius: 4 }} />
+          <View style={{ position: "absolute", bottom: 36, left: 0, right: 0, height: 6, backgroundColor: "#4e342e", opacity: 0.5 }} />
+          {bgPlants > 0 && Array.from({ length: bgPlants }).map((_, i) => (
+            <BackgroundPlantSilhouette key={`bg-${i}`} x={15 + i * 22} height={20 + Math.random() * 15} />
+          ))}
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("outdoor field") || env.includes("field") || env.includes("farm")) {
+      const bgPlants = plantCount > 5 ? Math.min(plantCount - 1, 12) : 0;
+      return (
+        <View style={[vpStyles.plantScene, { height: 220 }]}>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 60 }}>
+            <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 30, backgroundColor: "#42a5f5", opacity: 0.2 }} />
+            <View style={{ position: "absolute", top: 30, left: 0, right: 0, height: 30, backgroundColor: "#90caf9", opacity: 0.12 }} />
+          </View>
+          <View style={tentStyles.sunIcon}>
+            <Ionicons name="sunny" size={24} color="#ffd54f" />
+          </View>
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 30, backgroundColor: "#5d4037" }} />
+          <View style={{ position: "absolute", bottom: 28, left: 0, right: 0, height: 4, backgroundColor: "#4e342e", opacity: 0.4 }} />
+          {bgPlants > 0 && Array.from({ length: bgPlants }).map((_, i) => {
+            const xPos = 8 + (i * (160 / bgPlants));
+            const h = 10 + (i % 3) * 5;
+            const opac = 0.15 + (i % 3) * 0.05;
+            return (
+              <View key={`field-${i}`} style={{ position: "absolute", bottom: 30, left: xPos, alignItems: "center", opacity: opac }}>
+                <View style={{ width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderBottomWidth: h, borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: "#4caf50" }} />
+                <View style={{ width: 1, height: 6, backgroundColor: "#4caf50" }} />
+              </View>
+            );
+          })}
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("greenhouse")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "rgba(27,94,32,0.08)" }]}>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderColor: "rgba(200,230,200,0.3)", borderRadius: 6 }}>
+            <View style={{ position: "absolute", top: 0, bottom: 0, left: "33%", width: 1, backgroundColor: "rgba(200,230,200,0.2)" }} />
+            <View style={{ position: "absolute", top: 0, bottom: 0, left: "66%", width: 1, backgroundColor: "rgba(200,230,200,0.2)" }} />
+            <View style={{ position: "absolute", left: 0, right: 0, top: "33%", height: 1, backgroundColor: "rgba(200,230,200,0.2)" }} />
+            <View style={{ position: "absolute", left: 0, right: 0, top: "66%", height: 1, backgroundColor: "rgba(200,230,200,0.2)" }} />
+          </View>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(76,175,80,0.04)" }} />
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 50, backgroundColor: "#fff9c4", opacity: 0.08 }} />
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, backgroundColor: "rgba(200,230,200,0.25)" }} />
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, backgroundColor: "rgba(200,230,200,0.25)" }} />
+          <View style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 3, backgroundColor: "rgba(200,230,200,0.25)" }} />
+          <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 3, backgroundColor: "rgba(200,230,200,0.25)" }} />
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("closet")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "#111118" }]}>
+          <View style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 5, backgroundColor: "#1e1e28" }} />
+          <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 5, backgroundColor: "#1e1e28" }} />
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 5, backgroundColor: "#1e1e28" }} />
+          <View style={{ position: "absolute", top: 14, left: 5, right: 5, height: 2, backgroundColor: "#2a2a35", opacity: 0.6 }} />
+          <View style={{ position: "absolute", top: 18, left: 5, right: 5, height: 1, backgroundColor: "#2a2a35", opacity: 0.3 }} />
+          {lightType ? <LightFixture lightType={lightType} /> : (
+            <View style={tentStyles.lightArea}>
+              <View style={{ width: 20, height: 6, backgroundColor: "#333", borderRadius: 2 }}>
+                <View style={{ position: "absolute", top: 2, left: 4, width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#e0e0e0", opacity: 0.7 }} />
+                <View style={{ position: "absolute", top: 2, right: 4, width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#e0e0e0", opacity: 0.7 }} />
+              </View>
+            </View>
+          )}
+          {fanType ? <AnimatedFan /> : null}
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("indoor room") || env.includes("room")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "#1a1a2e" }]}>
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, backgroundColor: "#2a2a3e" }} />
+          <View style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 2, backgroundColor: "#22223a", opacity: 0.5 }} />
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, backgroundColor: "#22223a", opacity: 0.4 }} />
+          {lightType ? <LightFixture lightType={lightType} /> : null}
+          {fanType ? <AnimatedFan /> : null}
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (outdoor || env.includes("outdoor")) {
+      return (
+        <View style={[vpStyles.plantScene, { height: 220 }]}>
+          <View style={tentStyles.outdoorSky}>
+            <View style={tentStyles.skyGradient1} />
+            <View style={tentStyles.skyGradient2} />
+          </View>
+          <View style={tentStyles.sunIcon}>
+            <Ionicons name="sunny" size={22} color="#ffd54f" />
+          </View>
+          {lightSchedule ? (
+            <View style={tentStyles.scheduleBadge}>
+              <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+            </View>
+          ) : null}
+          <PlantCountIndicator count={plantCount} />
+          {plantContent}
+        </View>
+      );
+    }
+
+    if (env.includes("tent") || (showTent && !env)) {
+      return (
+        <View style={[tentStyles.tentFrame, { height: 220 }]}>
+          <View style={tentStyles.tentTopBar} />
+          <View style={tentStyles.tentLeftWall} />
+          <View style={tentStyles.tentRightWall} />
+          <View style={tentStyles.tentInnerShadow} />
+          <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "transparent" }]}>
+            {lightType ? <LightFixture lightType={lightType} /> : null}
+            {fanType ? <AnimatedFan /> : null}
             {lightSchedule ? (
               <View style={tentStyles.scheduleBadge}>
                 <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
               </View>
             ) : null}
+            <PlantCountIndicator count={plantCount} />
             {plantContent}
           </View>
-        ) : (
-          <View style={[tentStyles.tentFrame, { height: 220 }]}>
-            <View style={tentStyles.tentTopBar} />
-            <View style={tentStyles.tentLeftWall} />
-            <View style={tentStyles.tentRightWall} />
-            <View style={tentStyles.tentInnerShadow} />
-            <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "transparent" }]}>
-              {lightType ? <LightFixture lightType={lightType} /> : null}
-              {fanType ? <AnimatedFan /> : null}
-              {lightSchedule ? (
-                <View style={tentStyles.scheduleBadge}>
-                  <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
-                </View>
-              ) : null}
-              {plantContent}
-            </View>
-          </View>
-        )
-      ) : (
-        <View style={vpStyles.plantScene}>
-          {plantContent}
         </View>
-      )}
+      );
+    }
+
+    return (
+      <View style={vpStyles.plantScene}>
+        <PlantCountIndicator count={plantCount} />
+        {plantContent}
+      </View>
+    );
+  };
+
+  return (
+    <View style={vpStyles.card}>
+      {renderEnvironmentScene()}
 
       <View style={vpStyles.infoRow}>
         <View style={vpStyles.healthBadge}>

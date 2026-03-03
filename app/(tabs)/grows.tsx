@@ -51,6 +51,14 @@ interface Equipment {
   nutrientBrand: string;
   fanType: string;
   otherGear: string;
+  growEnvironment: string;
+  mediumBrand: string;
+  seedSource: string;
+  seedType: string;
+  potSize: string;
+  potType: string;
+  waterType: string;
+  phMethod: string;
 }
 
 interface BurpSchedule {
@@ -112,6 +120,12 @@ const GROW_TYPES = ["Autoflower", "Photoperiod", "Mixed"];
 const LIGHT_TYPES = ["LED", "HPS", "CMH/LEC", "CFL/T5", "MH", "Fluorescent", "Natural/Outdoor", "Other"];
 const LIGHT_SCHEDULES = ["18/6", "20/4", "24/0", "12/12", "14/10", "16/8", "Natural"];
 const MEDIUMS = ["Soil", "Coco Coir", "Peat Moss", "Soil/Peat/Coir Mix", "Peat/Perlite", "Coco/Perlite", "Super Soil", "Living Soil", "DWC Hydro", "RDWC", "Ebb & Flow", "NFT Hydro", "Aeroponics", "Rockwool", "Vermiculite", "Clay Pebbles", "Other"];
+
+const GROW_ENVIRONMENTS = ["Indoor Tent", "Indoor Room", "Closet", "Window Sill", "Balcony", "Outdoor Garden", "Outdoor Field", "Greenhouse", "Other"];
+const SEED_TYPES = ["Regular", "Feminized", "Auto Feminized", "Clone", "Bag Seed"];
+const POT_TYPES = ["Fabric Pot", "Plastic Pot", "Ceramic", "Air Pot", "Smart Pot", "Ground/Bed", "Bucket (DWC)", "Tray/Flood Table"];
+const WATER_TYPES = ["Tap Water", "Filtered/RO", "Spring Water", "Well Water", "Rain Water"];
+const PH_METHODS = ["pH Pen", "pH Drops", "pH Strips", "None"];
 
 function getDaysRunning(startDate: string): number {
   const start = new Date(startDate);
@@ -179,6 +193,8 @@ function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Gr
     lightType: "LED", lightWattage: "", lightBrand: "",
     tentSize: "", medium: "Soil", nutrientBrand: "",
     fanType: "", otherGear: "",
+    growEnvironment: "", mediumBrand: "", seedSource: "",
+    seedType: "", potSize: "", potType: "", waterType: "", phMethod: "",
   });
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
@@ -202,10 +218,14 @@ function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Gr
     onSave(grow);
   };
 
+  const isIndoorEnv = ["Indoor Tent", "Indoor Room", "Closet"].includes(equipment.growEnvironment);
+
   const steps = [
-    { title: "Basic Info", icon: "information-circle-outline" },
+    { title: "Basics", icon: "information-circle-outline" },
+    { title: "Seeds & Space", icon: "leaf-outline" },
+    { title: "Medium", icon: "layers-outline" },
+    { title: "Lighting", icon: "sunny-outline" },
     { title: "Timeline", icon: "calendar-outline" },
-    { title: "Equipment", icon: "build-outline" },
   ];
 
   return (
@@ -292,6 +312,190 @@ function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Gr
 
           {step === 1 && (
             <>
+              <Text style={addStyles.sectionLabel}>Seed Info</Text>
+              <Text style={addStyles.label}>Seed Type</Text>
+              <View style={addStyles.chipRow}>
+                {SEED_TYPES.map((st) => (
+                  <Pressable key={st} style={[addStyles.chip, equipment.seedType === st && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, seedType: st })}>
+                    <Text style={[addStyles.chipText, equipment.seedType === st && addStyles.chipTextActive]}>{st}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.label}>Seed Source</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.seedSource}
+                onChangeText={(v) => setEquipment({ ...equipment, seedSource: v })}
+                placeholder="e.g. ILGM, Seedsman, bag seed, friend's clone"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.sectionLabel}>Grow Environment</Text>
+              <Text style={addStyles.label}>Environment Type</Text>
+              <View style={addStyles.chipRow}>
+                {GROW_ENVIRONMENTS.map((env) => (
+                  <Pressable key={env} style={[addStyles.chip, equipment.growEnvironment === env && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, growEnvironment: env })}>
+                    <Text style={[addStyles.chipText, equipment.growEnvironment === env && addStyles.chipTextActive]}>{env}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {isIndoorEnv && (
+                <>
+                  <Text style={addStyles.label}>Tent/Space Size</Text>
+                  <TextInput
+                    style={addStyles.input}
+                    value={equipment.tentSize}
+                    onChangeText={(v) => setEquipment({ ...equipment, tentSize: v })}
+                    placeholder="e.g. 4x4 tent, 10x10 room, small closet"
+                    placeholderTextColor={C.textMuted}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <Text style={addStyles.sectionLabel}>Growing Medium</Text>
+              <Text style={addStyles.label}>Medium Type</Text>
+              <View style={addStyles.chipRow}>
+                {MEDIUMS.map((m) => (
+                  <Pressable key={m} style={[addStyles.chip, equipment.medium === m && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, medium: m })}>
+                    <Text style={[addStyles.chipText, equipment.medium === m && addStyles.chipTextActive]}>{m}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.label}>Medium Brand</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.mediumBrand}
+                onChangeText={(v) => setEquipment({ ...equipment, mediumBrand: v })}
+                placeholder="e.g. Fox Farm Ocean Forest, Roots Organic 707"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.sectionLabel}>Container</Text>
+              <Text style={addStyles.label}>Pot/Container Type</Text>
+              <View style={addStyles.chipRow}>
+                {POT_TYPES.map((pt) => (
+                  <Pressable key={pt} style={[addStyles.chip, equipment.potType === pt && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, potType: pt })}>
+                    <Text style={[addStyles.chipText, equipment.potType === pt && addStyles.chipTextActive]}>{pt}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.label}>Pot Size</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.potSize}
+                onChangeText={(v) => setEquipment({ ...equipment, potSize: v })}
+                placeholder="e.g. 3 gallon, 5 gallon, 25 gallon, raised bed"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.sectionLabel}>Water</Text>
+              <Text style={addStyles.label}>Water Type</Text>
+              <View style={addStyles.chipRow}>
+                {WATER_TYPES.map((wt) => (
+                  <Pressable key={wt} style={[addStyles.chip, equipment.waterType === wt && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, waterType: wt })}>
+                    <Text style={[addStyles.chipText, equipment.waterType === wt && addStyles.chipTextActive]}>{wt}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.label}>pH Method</Text>
+              <View style={addStyles.chipRow}>
+                {PH_METHODS.map((ph) => (
+                  <Pressable key={ph} style={[addStyles.chip, equipment.phMethod === ph && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, phMethod: ph })}>
+                    <Text style={[addStyles.chipText, equipment.phMethod === ph && addStyles.chipTextActive]}>{ph}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <Text style={addStyles.sectionLabel}>Lighting Setup</Text>
+              <Text style={addStyles.label}>Light Type</Text>
+              <View style={addStyles.chipRow}>
+                {LIGHT_TYPES.map((lt) => (
+                  <Pressable key={lt} style={[addStyles.chip, equipment.lightType === lt && addStyles.chipActive]}
+                    onPress={() => setEquipment({ ...equipment, lightType: lt })}>
+                    <Text style={[addStyles.chipText, equipment.lightType === lt && addStyles.chipTextActive]}>{lt}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.label}>Light Wattage</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.lightWattage}
+                onChangeText={(v) => setEquipment({ ...equipment, lightWattage: v })}
+                placeholder="e.g. 600w, 2x 315w CMH"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.label}>Light Brand/Model</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.lightBrand}
+                onChangeText={(v) => setEquipment({ ...equipment, lightBrand: v })}
+                placeholder="e.g. Mars Hydro TSW-2000, Spider Farmer SF4000"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.label}>Light Schedule</Text>
+              <View style={addStyles.chipRow}>
+                {LIGHT_SCHEDULES.map((ls) => (
+                  <Pressable key={ls} style={[addStyles.chip, lightSchedule === ls && addStyles.chipActive]} onPress={() => setLightSchedule(ls)}>
+                    <Text style={[addStyles.chipText, lightSchedule === ls && addStyles.chipTextActive]}>{ls}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={addStyles.sectionLabel}>Other Equipment</Text>
+              <Text style={addStyles.label}>Nutrient Brand</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.nutrientBrand}
+                onChangeText={(v) => setEquipment({ ...equipment, nutrientBrand: v })}
+                placeholder="e.g. Fox Farm, General Hydroponics, Advanced Nutrients"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.label}>Fan/Ventilation Setup</Text>
+              <TextInput
+                style={addStyles.input}
+                value={equipment.fanType}
+                onChangeText={(v) => setEquipment({ ...equipment, fanType: v })}
+                placeholder="e.g. 6 inch inline fan + carbon filter, 2x oscillating"
+                placeholderTextColor={C.textMuted}
+              />
+
+              <Text style={addStyles.label}>Other Gear (optional)</Text>
+              <TextInput
+                style={[addStyles.input, { minHeight: 70, textAlignVertical: "top" }]}
+                value={equipment.otherGear}
+                onChangeText={(v) => setEquipment({ ...equipment, otherGear: v })}
+                placeholder="e.g. pH meter brand, CO2 setup, humidifier, AC unit..."
+                placeholderTextColor={C.textMuted}
+                multiline
+              />
+            </>
+          )}
+
+          {step === 4 && (
+            <>
               <View style={addStyles.dateCard}>
                 <Ionicons name="calendar" size={24} color={C.tint} />
                 <View style={{ flex: 1 }}>
@@ -324,97 +528,6 @@ function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Gr
                 </Pressable>
               </View>
               <Text style={addStyles.daysSub}>{daysAgo === "0" ? "Starting today" : `Started ${daysAgo} day${parseInt(daysAgo) !== 1 ? "s" : ""} ago`}</Text>
-
-              <Text style={addStyles.label}>Light Schedule</Text>
-              <View style={addStyles.chipRow}>
-                {LIGHT_SCHEDULES.map((ls) => (
-                  <Pressable key={ls} style={[addStyles.chip, lightSchedule === ls && addStyles.chipActive]} onPress={() => setLightSchedule(ls)}>
-                    <Text style={[addStyles.chipText, lightSchedule === ls && addStyles.chipTextActive]}>{ls}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          )}
-
-          {step === 2 && (
-            <>
-              <Text style={addStyles.sectionLabel}>Lighting Setup</Text>
-              <Text style={addStyles.label}>Light Type</Text>
-              <View style={addStyles.chipRow}>
-                {LIGHT_TYPES.map((lt) => (
-                  <Pressable key={lt} style={[addStyles.chip, equipment.lightType === lt && addStyles.chipActive]}
-                    onPress={() => setEquipment({ ...equipment, lightType: lt })}>
-                    <Text style={[addStyles.chipText, equipment.lightType === lt && addStyles.chipTextActive]}>{lt}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={addStyles.label}>Light Wattage</Text>
-              <TextInput
-                style={addStyles.input}
-                value={equipment.lightWattage}
-                onChangeText={(v) => setEquipment({ ...equipment, lightWattage: v })}
-                placeholder="e.g. 600w, 2x 315w CMH"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={addStyles.label}>Light Brand/Model</Text>
-              <TextInput
-                style={addStyles.input}
-                value={equipment.lightBrand}
-                onChangeText={(v) => setEquipment({ ...equipment, lightBrand: v })}
-                placeholder="e.g. Mars Hydro TSW-2000, Spider Farmer SF4000"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={addStyles.sectionLabel}>Grow Space</Text>
-              <Text style={addStyles.label}>Tent/Space Size</Text>
-              <TextInput
-                style={addStyles.input}
-                value={equipment.tentSize}
-                onChangeText={(v) => setEquipment({ ...equipment, tentSize: v })}
-                placeholder="e.g. 4x4 tent, 10x10 room, small closet"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={addStyles.label}>Growing Medium</Text>
-              <View style={addStyles.chipRow}>
-                {MEDIUMS.map((m) => (
-                  <Pressable key={m} style={[addStyles.chip, equipment.medium === m && addStyles.chipActive]}
-                    onPress={() => setEquipment({ ...equipment, medium: m })}>
-                    <Text style={[addStyles.chipText, equipment.medium === m && addStyles.chipTextActive]}>{m}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <Text style={addStyles.sectionLabel}>Other Equipment</Text>
-              <Text style={addStyles.label}>Nutrient Brand</Text>
-              <TextInput
-                style={addStyles.input}
-                value={equipment.nutrientBrand}
-                onChangeText={(v) => setEquipment({ ...equipment, nutrientBrand: v })}
-                placeholder="e.g. Fox Farm, General Hydroponics, Advanced Nutrients"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={addStyles.label}>Fan/Ventilation Setup</Text>
-              <TextInput
-                style={addStyles.input}
-                value={equipment.fanType}
-                onChangeText={(v) => setEquipment({ ...equipment, fanType: v })}
-                placeholder="e.g. 6 inch inline fan + carbon filter, 2x oscillating"
-                placeholderTextColor={C.textMuted}
-              />
-
-              <Text style={addStyles.label}>Other Gear (optional)</Text>
-              <TextInput
-                style={[addStyles.input, { minHeight: 70, textAlignVertical: "top" }]}
-                value={equipment.otherGear}
-                onChangeText={(v) => setEquipment({ ...equipment, otherGear: v })}
-                placeholder="e.g. pH meter brand, CO2 setup, humidifier, AC unit, pH pens..."
-                placeholderTextColor={C.textMuted}
-                multiline
-              />
             </>
           )}
 
@@ -425,7 +538,7 @@ function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Gr
                 <Text style={addStyles.backBtnText}>Back</Text>
               </Pressable>
             )}
-            {step < 2 ? (
+            {step < 4 ? (
               <Pressable style={[addStyles.nextBtn, step === 0 && { flex: 1 }]} onPress={() => setStep(step + 1)}>
                 <LinearGradient colors={["#4caf50", "#2e7d32"]} style={addStyles.nextBtnGrad}>
                   <Text style={addStyles.nextBtnText}>Next</Text>
@@ -620,6 +733,9 @@ function GrowDetailModal({
             medium={currentGrow.equipment?.medium}
             fanType={currentGrow.equipment?.fanType}
             lightSchedule={currentGrow.lightSchedule}
+            growEnvironment={currentGrow.equipment?.growEnvironment}
+            plantCount={parseInt(currentGrow.plantCount) || 1}
+            potType={currentGrow.equipment?.potType}
           />
 
           {activeTab === "log" && (
@@ -1028,11 +1144,19 @@ function GrowDetailModal({
           {activeTab === "equipment" && (
             <>
               {[
+                { label: "Environment", value: currentGrow.equipment.growEnvironment, icon: "home-outline" },
+                { label: "Seed Type", value: currentGrow.equipment.seedType, icon: "leaf-outline" },
+                { label: "Seed Source", value: currentGrow.equipment.seedSource, icon: "storefront-outline" },
                 { label: "Light Type", value: currentGrow.equipment.lightType, icon: "sunny-outline" },
                 { label: "Wattage", value: currentGrow.equipment.lightWattage, icon: "flash-outline" },
                 { label: "Light Brand/Model", value: currentGrow.equipment.lightBrand, icon: "pricetag-outline" },
                 { label: "Grow Space", value: currentGrow.equipment.tentSize, icon: "square-outline" },
                 { label: "Medium", value: currentGrow.equipment.medium, icon: "layers-outline" },
+                { label: "Medium Brand", value: currentGrow.equipment.mediumBrand, icon: "pricetag-outline" },
+                { label: "Pot Type", value: currentGrow.equipment.potType, icon: "cube-outline" },
+                { label: "Pot Size", value: currentGrow.equipment.potSize, icon: "resize-outline" },
+                { label: "Water Type", value: currentGrow.equipment.waterType, icon: "water-outline" },
+                { label: "pH Method", value: currentGrow.equipment.phMethod, icon: "analytics-outline" },
                 { label: "Nutrients", value: currentGrow.equipment.nutrientBrand, icon: "flask-outline" },
                 { label: "Ventilation", value: currentGrow.equipment.fanType, icon: "cloud-outline" },
                 { label: "Other Gear", value: currentGrow.equipment.otherGear, icon: "construct-outline" },
