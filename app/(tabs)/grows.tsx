@@ -111,7 +111,7 @@ const STAGE_COLORS: Record<string, string> = {
 const GROW_TYPES = ["Autoflower", "Photoperiod", "Mixed"];
 const LIGHT_TYPES = ["LED", "HPS", "CMH/LEC", "CFL/T5", "MH", "Fluorescent", "Natural/Outdoor", "Other"];
 const LIGHT_SCHEDULES = ["18/6", "20/4", "24/0", "12/12", "14/10", "16/8", "Natural"];
-const MEDIUMS = ["Soil", "Coco Coir", "DWC Hydro", "RDWC", "Aeroponics", "Rockwool", "Peat/Perlite", "Other"];
+const MEDIUMS = ["Soil", "Coco Coir", "Peat Moss", "Soil/Peat/Coir Mix", "Peat/Perlite", "Coco/Perlite", "Super Soil", "Living Soil", "DWC Hydro", "RDWC", "Ebb & Flow", "NFT Hydro", "Aeroponics", "Rockwool", "Vermiculite", "Clay Pebbles", "Other"];
 
 function getDaysRunning(startDate: string): number {
   const start = new Date(startDate);
@@ -615,6 +615,11 @@ function GrowDetailModal({
             transplants={currentGrow.transplants || 0}
             nodeCount={currentGrow.nodeCount || 0}
             budCount={currentGrow.budCount || 0}
+            lightType={currentGrow.equipment?.lightType}
+            tentSize={currentGrow.equipment?.tentSize}
+            medium={currentGrow.equipment?.medium}
+            fanType={currentGrow.equipment?.fanType}
+            lightSchedule={currentGrow.lightSchedule}
           />
 
           {activeTab === "log" && (

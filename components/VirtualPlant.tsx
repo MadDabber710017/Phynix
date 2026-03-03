@@ -26,6 +26,11 @@ interface VirtualPlantProps {
   transplants?: number;
   nodeCount?: number;
   budCount?: number;
+  lightType?: string;
+  tentSize?: string;
+  medium?: string;
+  fanType?: string;
+  lightSchedule?: string;
 }
 
 const STAGE_INDEX: Record<string, number> = {
@@ -358,6 +363,150 @@ function PistilHair({ x, y, angle }: { x: number; y: number; angle: number }) {
   );
 }
 
+function getMediumColor(medium?: string): string {
+  if (!medium) return "#3e2723";
+  const m = medium.toLowerCase();
+  if (m.includes("coco") && m.includes("perlite")) return "#795548";
+  if (m.includes("coco")) return "#6d4c41";
+  if (m.includes("peat") && m.includes("coir")) return "#4e342e";
+  if (m.includes("soil/peat")) return "#4e342e";
+  if (m.includes("peat moss")) return "#2c1e13";
+  if (m.includes("peat") && m.includes("perlite")) return "#5d4037";
+  if (m.includes("living soil")) return "#33691e";
+  if (m.includes("super soil")) return "#2e7d32";
+  if (m.includes("soil")) return "#3e2723";
+  if (m.includes("rockwool")) return "#bdbdbd";
+  if (m.includes("clay pebble")) return "#8d6e63";
+  if (m.includes("vermiculite")) return "#a1887f";
+  if (m.includes("dwc") || m.includes("rdwc") || m.includes("nft") || m.includes("ebb") || m.includes("hydro") || m.includes("aero")) return "#1a237e";
+  return "#3e2723";
+}
+
+function isHydroMedium(medium?: string): boolean {
+  if (!medium) return false;
+  const m = medium.toLowerCase();
+  return m.includes("dwc") || m.includes("rdwc") || m.includes("nft") || m.includes("ebb") || m.includes("hydro") || m.includes("aero");
+}
+
+function isOutdoor(lightType?: string): boolean {
+  if (!lightType) return false;
+  const l = lightType.toLowerCase();
+  return l.includes("natural") || l.includes("outdoor") || l.includes("sun");
+}
+
+function AnimatedFan() {
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    rotation.value = withRepeat(
+      withTiming(360, { duration: 1200, easing: Easing.linear }),
+      -1,
+      false
+    );
+  }, []);
+
+  const fanStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  return (
+    <View style={tentStyles.fanContainer}>
+      <Animated.View style={[tentStyles.fanBlades, fanStyle]}>
+        <View style={[tentStyles.fanBlade, { transform: [{ rotate: "0deg" }] }]} />
+        <View style={[tentStyles.fanBlade, { transform: [{ rotate: "90deg" }] }]} />
+        <View style={[tentStyles.fanBlade, { transform: [{ rotate: "180deg" }] }]} />
+        <View style={[tentStyles.fanBlade, { transform: [{ rotate: "270deg" }] }]} />
+      </Animated.View>
+      <View style={tentStyles.fanCenter} />
+    </View>
+  );
+}
+
+function LightFixture({ lightType }: { lightType: string }) {
+  const l = lightType.toLowerCase();
+  const glowOpacity = useSharedValue(0.3);
+
+  useEffect(() => {
+    glowOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.3, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
+  }));
+
+  if (l.includes("hps")) {
+    return (
+      <View style={tentStyles.lightArea}>
+        <View style={tentStyles.lightString} />
+        <View style={tentStyles.lightString2} />
+        <View style={[tentStyles.hpsBulb]}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#ffb74d" }} />
+        </View>
+        <Animated.View style={[tentStyles.lightGlow, { backgroundColor: "#ff9800" }, glowStyle]} />
+      </View>
+    );
+  }
+
+  if (l.includes("cmh") || l.includes("lec")) {
+    return (
+      <View style={tentStyles.lightArea}>
+        <View style={tentStyles.lightString} />
+        <View style={tentStyles.lightString2} />
+        <View style={[tentStyles.hpsBulb]}>
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: "#fff9c4" }} />
+        </View>
+        <Animated.View style={[tentStyles.lightGlow, { backgroundColor: "#fff176" }, glowStyle]} />
+      </View>
+    );
+  }
+
+  if (l.includes("cfl") || l.includes("t5")) {
+    return (
+      <View style={tentStyles.lightArea}>
+        <View style={tentStyles.lightString} />
+        <View style={tentStyles.lightString2} />
+        <View style={tentStyles.cflTubes}>
+          <View style={tentStyles.cflTube} />
+          <View style={tentStyles.cflTube} />
+          <View style={tentStyles.cflTube} />
+        </View>
+        <Animated.View style={[tentStyles.lightGlow, { backgroundColor: "#e0e0e0" }, glowStyle]} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={tentStyles.lightArea}>
+      <View style={tentStyles.lightString} />
+      <View style={tentStyles.lightString2} />
+      <View style={tentStyles.ledPanel}>
+        <View style={tentStyles.ledDotRow}>
+          <View style={[tentStyles.ledDot, { backgroundColor: "#e1bee7" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#fff" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#e1bee7" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#fff" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#e1bee7" }]} />
+        </View>
+        <View style={tentStyles.ledDotRow}>
+          <View style={[tentStyles.ledDot, { backgroundColor: "#fff" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#e1bee7" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#fff" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#e1bee7" }]} />
+          <View style={[tentStyles.ledDot, { backgroundColor: "#fff" }]} />
+        </View>
+      </View>
+      <Animated.View style={[tentStyles.lightGlow, { backgroundColor: "#ce93d8" }, glowStyle]} />
+    </View>
+  );
+}
+
 function HangingPlant() {
   const sway = useSharedValue(0);
 
@@ -406,6 +555,11 @@ export default function VirtualPlant({
   transplants = 0,
   nodeCount = 0,
   budCount = 0,
+  lightType,
+  tentSize,
+  medium,
+  fanType,
+  lightSchedule,
 }: VirtualPlantProps) {
   const stageIdx = STAGE_INDEX[stage] ?? 2;
   const healthColor = getHealthColor(daysSinceLastLog, recentLogCount);
@@ -413,8 +567,13 @@ export default function VirtualPlant({
   const droop = getDroopAngle(daysSinceLastLog);
 
   const leafBaseColor = nutrientFeedings > 0 ? "#2e7d32" : healthColor;
-  const soilColor = waterings > 0 ? "#2d1a0e" : "#3e2723";
+  const mediumColor = medium ? getMediumColor(medium) : (waterings > 0 ? "#2d1a0e" : "#3e2723");
+  const soilColor = mediumColor;
   const potScale = transplants > 0 ? 1 + Math.min(transplants * 0.08, 0.3) : 1;
+
+  const showTent = !!(lightType || tentSize || medium || fanType || lightSchedule);
+  const outdoor = isOutdoor(lightType);
+  const hydro = isHydroMedium(medium);
 
   const visibleNodes = stageIdx <= 1 ? 0 : Math.min(nodeCount > 0 ? nodeCount : Math.max(2, stageIdx), 8);
   const visibleBuds = stageIdx >= 5 ? Math.min(budCount > 0 ? budCount : Math.max(1, stageIdx - 4), 6) : 0;
@@ -593,33 +752,113 @@ export default function VirtualPlant({
   const potWidth = 60 * potScale;
   const potBodyWidth = 52 * potScale;
 
+  const renderPot = () => {
+    if (hydro) {
+      return (
+        <View style={vpStyles.pot}>
+          <View style={[vpStyles.potRim, { width: potWidth, backgroundColor: "#37474f" }]} />
+          <View style={[vpStyles.potBody, { width: potBodyWidth, backgroundColor: "#263238" }]} />
+          <View style={[vpStyles.potSoil, { width: potBodyWidth - 2, backgroundColor: "#1a237e" }]}>
+            <View style={{ position: "absolute", top: 2, left: 4, width: 6, height: 2, borderRadius: 1, backgroundColor: "#42a5f5", opacity: 0.5 }} />
+            <View style={{ position: "absolute", top: 3, right: 6, width: 8, height: 2, borderRadius: 1, backgroundColor: "#42a5f5", opacity: 0.4 }} />
+          </View>
+        </View>
+      );
+    }
+    if (medium?.toLowerCase().includes("rockwool")) {
+      return (
+        <View style={vpStyles.pot}>
+          <View style={{ width: potBodyWidth, height: potBodyWidth * 0.6, backgroundColor: "#bdbdbd", borderRadius: 4 }} />
+        </View>
+      );
+    }
+    if (medium?.toLowerCase().includes("clay pebble")) {
+      return (
+        <View style={vpStyles.pot}>
+          <View style={[vpStyles.potRim, { width: potWidth }]} />
+          <View style={[vpStyles.potBody, { width: potBodyWidth }]} />
+          <View style={[vpStyles.potSoil, { width: potBodyWidth - 2, backgroundColor: "#8d6e63" }]}>
+            <View style={{ position: "absolute", top: 1, left: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: "#a1887f" }} />
+            <View style={{ position: "absolute", top: 2, left: 10, width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#8d6e63" }} />
+            <View style={{ position: "absolute", top: 1, right: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: "#a1887f" }} />
+            <View style={{ position: "absolute", top: 2, right: 12, width: 3, height: 3, borderRadius: 1.5, backgroundColor: "#795548" }} />
+          </View>
+        </View>
+      );
+    }
+    return (
+      <View style={vpStyles.pot}>
+        <View style={[vpStyles.potRim, { width: potWidth }]} />
+        <View style={[vpStyles.potBody, { width: potBodyWidth }]} />
+        <View style={[vpStyles.potSoil, { width: potBodyWidth - 2, backgroundColor: soilColor }]} />
+      </View>
+    );
+  };
+
+  const plantContent = (
+    <>
+      {isHarvested ? (
+        <View style={vpStyles.harvestArea}>
+          <View style={{ width: 30, height: 3, backgroundColor: "#5d4037", borderRadius: 1.5, marginBottom: 2 }} />
+          <View style={{ width: 2, height: 10, backgroundColor: "#6d4c41" }} />
+          <HangingPlant />
+        </View>
+      ) : (
+        <>
+          {renderPot()}
+          <View style={vpStyles.plantArea}>
+            {stageIdx === 0 && renderSeedStage()}
+            {stageIdx === 1 && renderSeedlingStage()}
+            {stageIdx >= 2 && renderPlant()}
+          </View>
+        </>
+      )}
+      {sparkles}
+    </>
+  );
+
   return (
     <View style={vpStyles.card}>
-      <View style={vpStyles.plantScene}>
-        {isHarvested ? (
-          <View style={vpStyles.harvestArea}>
-            <View style={{ width: 30, height: 3, backgroundColor: "#5d4037", borderRadius: 1.5, marginBottom: 2 }} />
-            <View style={{ width: 2, height: 10, backgroundColor: "#6d4c41" }} />
-            <HangingPlant />
+      {showTent ? (
+        outdoor ? (
+          <View style={[vpStyles.plantScene, { height: 220 }]}>
+            <View style={tentStyles.outdoorSky}>
+              <View style={tentStyles.skyGradient1} />
+              <View style={tentStyles.skyGradient2} />
+            </View>
+            <View style={tentStyles.sunIcon}>
+              <Ionicons name="sunny" size={22} color="#ffd54f" />
+            </View>
+            {lightSchedule ? (
+              <View style={tentStyles.scheduleBadge}>
+                <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+              </View>
+            ) : null}
+            {plantContent}
           </View>
         ) : (
-          <>
-            <View style={vpStyles.pot}>
-              <View style={[vpStyles.potRim, { width: potWidth }]} />
-              <View style={[vpStyles.potBody, { width: potBodyWidth }]} />
-              <View style={[vpStyles.potSoil, { width: potBodyWidth - 2, backgroundColor: soilColor }]} />
+          <View style={[tentStyles.tentFrame, { height: 220 }]}>
+            <View style={tentStyles.tentTopBar} />
+            <View style={tentStyles.tentLeftWall} />
+            <View style={tentStyles.tentRightWall} />
+            <View style={tentStyles.tentInnerShadow} />
+            <View style={[vpStyles.plantScene, { height: 220, backgroundColor: "transparent" }]}>
+              {lightType ? <LightFixture lightType={lightType} /> : null}
+              {fanType ? <AnimatedFan /> : null}
+              {lightSchedule ? (
+                <View style={tentStyles.scheduleBadge}>
+                  <Text style={tentStyles.scheduleText}>{lightSchedule}</Text>
+                </View>
+              ) : null}
+              {plantContent}
             </View>
-
-            <View style={vpStyles.plantArea}>
-              {stageIdx === 0 && renderSeedStage()}
-              {stageIdx === 1 && renderSeedlingStage()}
-              {stageIdx >= 2 && renderPlant()}
-            </View>
-          </>
-        )}
-
-        {sparkles}
-      </View>
+          </View>
+        )
+      ) : (
+        <View style={vpStyles.plantScene}>
+          {plantContent}
+        </View>
+      )}
 
       <View style={vpStyles.infoRow}>
         <View style={vpStyles.healthBadge}>
@@ -818,5 +1057,196 @@ const vpStyles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     fontSize: 11,
     color: C.textMuted,
+  },
+});
+
+const tentStyles = StyleSheet.create({
+  tentFrame: {
+    position: "relative",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#1a1a1a",
+  },
+  tentTopBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: "#2a2a2a",
+    zIndex: 10,
+  },
+  tentLeftWall: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: "#2a2a2a",
+    zIndex: 10,
+  },
+  tentRightWall: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: "#2a2a2a",
+    zIndex: 10,
+  },
+  tentInnerShadow: {
+    position: "absolute",
+    top: 4,
+    left: 3,
+    right: 3,
+    height: 20,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    zIndex: 5,
+  },
+  lightArea: {
+    position: "absolute",
+    top: 8,
+    alignSelf: "center",
+    alignItems: "center",
+    zIndex: 8,
+  },
+  lightString: {
+    position: "absolute",
+    top: -8,
+    left: -12,
+    width: 1,
+    height: 12,
+    backgroundColor: "#616161",
+  },
+  lightString2: {
+    position: "absolute",
+    top: -8,
+    right: -12,
+    width: 1,
+    height: 12,
+    backgroundColor: "#616161",
+  },
+  ledPanel: {
+    width: 50,
+    height: 14,
+    backgroundColor: "#212121",
+    borderRadius: 3,
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 2,
+    paddingVertical: 2,
+  },
+  ledDotRow: {
+    flexDirection: "row",
+    gap: 3,
+  },
+  ledDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+  },
+  lightGlow: {
+    position: "absolute",
+    top: 14,
+    width: 80,
+    height: 60,
+    borderRadius: 40,
+    alignSelf: "center",
+  },
+  hpsBulb: {
+    width: 20,
+    height: 16,
+    backgroundColor: "#424242",
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cflTubes: {
+    flexDirection: "row",
+    gap: 3,
+  },
+  cflTube: {
+    width: 3,
+    height: 16,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 1.5,
+  },
+  fanContainer: {
+    position: "absolute",
+    top: 30,
+    right: 12,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 8,
+  },
+  fanBlades: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fanBlade: {
+    position: "absolute",
+    width: 3,
+    height: 8,
+    backgroundColor: "#78909c",
+    borderRadius: 1.5,
+    top: 1,
+  },
+  fanCenter: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#455a64",
+  },
+  scheduleBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 12,
+  },
+  scheduleText: {
+    fontFamily: "Nunito_600SemiBold",
+    fontSize: 9,
+    color: "#e0e0e0",
+  },
+  outdoorSky: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  skyGradient1: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    backgroundColor: "#64b5f6",
+    opacity: 0.3,
+  },
+  skyGradient2: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    right: 0,
+    height: 40,
+    backgroundColor: "#90caf9",
+    opacity: 0.15,
+  },
+  sunIcon: {
+    position: "absolute",
+    top: 8,
+    right: 12,
+    zIndex: 8,
   },
 });
