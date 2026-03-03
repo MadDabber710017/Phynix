@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import OpenAI from "openai";
 import express from "express";
 import { pool } from "./db";
+import { initAuthTables, registerUser, loginUser, getMe, updateProfile, authMiddleware, requireAuth, type AuthRequest } from "./auth";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -18,6 +19,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (e) {
     console.log("ALTER TABLE for repost columns (may already exist):", e);
   }
+
+  await initAuthTables();
+
+  app.use(authMiddleware as any);
+
+  app.post("/api/auth/register", bodyParser, registerUser as any);
+  app.post("/api/auth/login", bodyParser, loginUser as any);
+  app.get("/api/auth/me", requireAuth as any, getMe as any);
+  app.put("/api/auth/profile", bodyParser, requireAuth as any, updateProfile as any);
+  app.post("/api/auth/logout", (_req: Request, res: Response) => {
+    res.json({ success: true });
+  });
+
+  app.get("/api/user/grows", requireAuth as any, async (req: AuthRequest, res: Response) => {
+    try {
+      const { rows } = await pool.query("SELECT grow_data FROM user_grows WHERE user_id = $1", [req.user!.id]);
+      res.json({ grows: rows.length > 0 ? rows[0].grow_data : [] });
+    } catch (err) {
+      console.error("Error fetching grows:", err);
+      res.status(500).json({ error: "Failed to fetch grows" });
+    }
+  });
+
+  app.put("/api/user/grows", bodyParser, requireAuth as any, async (req: AuthRequest, res: Response) => {
+    try {
+      const { grows } = req.body;
+      if (!Array.isArray(grows)) return res.status(400).json({ error: "grows must be an array" });
+      await pool.query(
+        `INSERT INTO user_grows (user_id, grow_data, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET grow_data = $2, updated_at = NOW()`,
+        [req.user!.id, JSON.stringify(grows)]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error saving grows:", err);
+      res.status(500).json({ error: "Failed to save grows" });
+    }
+  });
+
+  app.get("/api/user/gamification", requireAuth as any, async (req: AuthRequest, res: Response) => {
+    try {
+      const { rows } = await pool.query("SELECT gamification_data FROM user_gamification WHERE user_id = $1", [req.user!.id]);
+      res.json({ data: rows.length > 0 ? rows[0].gamification_data : null });
+    } catch (err) {
+      console.error("Error fetching gamification:", err);
+      res.status(500).json({ error: "Failed to fetch gamification" });
+    }
+  });
+
+  app.put("/api/user/gamification", bodyParser, requireAuth as any, async (req: AuthRequest, res: Response) => {
+    try {
+      const { data } = req.body;
+      if (!data) return res.status(400).json({ error: "data is required" });
+      await pool.query(
+        `INSERT INTO user_gamification (user_id, gamification_data, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET gamification_data = $2, updated_at = NOW()`,
+        [req.user!.id, JSON.stringify(data)]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Error saving gamification:", err);
+      res.status(500).json({ error: "Failed to save gamification" });
+    }
+  });
 
   app.post("/api/analyze-plant", bodyParser, async (req: Request, res: Response) => {
     try {
@@ -163,19 +228,21 @@ IMPORTANT RULES:
     }
   });
 
-  app.post("/api/community/posts", bodyParser, async (req: Request, res: Response) => {
+  app.post("/api/community/posts", bodyParser, async (req: AuthRequest, res: Response) => {
     try {
       const { growerName, strain, stage, title, description, imageBase64, deviceId, shared_from, original_post_id } = req.body;
       if (!growerName || !title || !description || !stage) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      const userId = req.user?.id || null;
+      const profilePic = req.user?.profile_pic || null;
       const { rows } = await pool.query(
-        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64, device_id, shared_from, original_post_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null, deviceId || "", shared_from || null, original_post_id || null]
+        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64, device_id, shared_from, original_post_id, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null, deviceId || "", shared_from || null, original_post_id || null, userId]
       );
-      res.status(201).json({ ...rows[0], liked_by_me: false });
+      res.status(201).json({ ...rows[0], liked_by_me: false, profile_pic: profilePic });
     } catch (error) {
       console.error("Error creating post:", error);
       res.status(500).json({ error: "Failed to create post" });

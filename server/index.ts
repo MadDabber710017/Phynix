@@ -40,7 +40,7 @@ function setupCors(app: express.Application) {
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
       res.header("Access-Control-Allow-Credentials", "true");
     }
 
@@ -198,6 +198,21 @@ function configureExpoAndLanding(app: express.Application) {
 
     next();
   });
+
+  app.get("/manifest.json", (_req: Request, res: Response) => {
+    const manifestPath = path.resolve(process.cwd(), "web", "manifest.json");
+    res.setHeader("Content-Type", "application/manifest+json");
+    res.sendFile(manifestPath);
+  });
+
+  app.get("/service-worker.js", (_req: Request, res: Response) => {
+    const swPath = path.resolve(process.cwd(), "web", "service-worker.js");
+    res.setHeader("Content-Type", "application/javascript");
+    res.setHeader("Service-Worker-Allowed", "/");
+    res.sendFile(swPath);
+  });
+
+  app.use("/pwa", express.static(path.resolve(process.cwd(), "web")));
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(express.static(path.resolve(process.cwd(), "static-build")));

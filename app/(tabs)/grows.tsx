@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -20,8 +20,10 @@ import Colors from "@/constants/colors";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 
-import { addXP, loadProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
+import { addXP, loadProfile, saveProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
 import VirtualPlant from "@/components/VirtualPlant";
+import { useAuth } from "@/contexts/AuthContext";
+import { getApiUrl } from "@/lib/query-client";
 
 const C = Colors.dark;
 const STORAGE_KEY = "phynix_grows_v2";
@@ -1230,6 +1232,145 @@ export default function GrowsScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [selectedGrow, setSelectedGrow] = useState<Grow | null>(null);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const { isAuthenticated } = useAuth();
+  const hasSyncedRef = useRef(false);
+
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem("phynix_auth_token");
+    } catch {
+      return null;
+    }
+  };
+
+  const syncGrowsToServer = async (growsData: Grow[]) => {
+    try {
+      const authToken = await getAuthToken();
+      if (!authToken) return;
+      const baseUrl = getApiUrl();
+      const url = new URL("/api/user/grows", baseUrl);
+      await fetch(url.toString(), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ grows: growsData }),
+      });
+    } catch (err) {
+      console.log("Failed to sync grows to server:", err);
+    }
+  };
+
+  const syncGamificationToServer = async () => {
+    try {
+      const authToken = await getAuthToken();
+      if (!authToken) return;
+      const profile = await loadProfile();
+      const baseUrl = getApiUrl();
+      const url = new URL("/api/user/gamification", baseUrl);
+      await fetch(url.toString(), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ gamification: profile }),
+      });
+    } catch (err) {
+      console.log("Failed to sync gamification to server:", err);
+    }
+  };
+
+  const syncFromServer = async () => {
+    try {
+      const authToken = await getAuthToken();
+      if (!authToken) return;
+      const baseUrl = getApiUrl();
+
+      const growsUrl = new URL("/api/user/grows", baseUrl);
+      const growsRes = await fetch(growsUrl.toString(), {
+        headers: { "Authorization": `Bearer ${authToken}` },
+      });
+
+      if (growsRes.ok) {
+        const growsData = await growsRes.json();
+        const serverGrows: Grow[] = growsData.grows || [];
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        const localGrows: Grow[] = stored ? JSON.parse(stored) : [];
+
+        if (serverGrows.length > 0) {
+          const serverMap = new Map(serverGrows.map((g: Grow) => [g.id, g]));
+          const merged = [...serverGrows];
+          for (const local of localGrows) {
+            if (!serverMap.has(local.id)) {
+              merged.push(local);
+            }
+          }
+          setGrows(merged);
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          if (merged.length !== serverGrows.length) {
+            await syncGrowsToServer(merged);
+          }
+        } else if (localGrows.length > 0) {
+          await syncGrowsToServer(localGrows);
+        }
+      }
+
+      const gamUrl = new URL("/api/user/gamification", baseUrl);
+      const gamRes = await fetch(gamUrl.toString(), {
+        headers: { "Authorization": `Bearer ${authToken}` },
+      });
+
+      if (gamRes.ok) {
+        const gamData = await gamRes.json();
+        const serverProfile: GrowProfile | null = gamData.gamification || null;
+        const localProfile = await loadProfile();
+
+        if (serverProfile && serverProfile.xp > 0) {
+          const mergedProfile: GrowProfile = {
+            ...localProfile,
+            xp: Math.max(serverProfile.xp, localProfile.xp),
+            level: Math.max(serverProfile.level, localProfile.level),
+            title: serverProfile.xp >= localProfile.xp ? serverProfile.title : localProfile.title,
+            achievements: (() => {
+              const achMap = new Map(localProfile.achievements.map(a => [a.id, a]));
+              for (const a of serverProfile.achievements) {
+                if (!achMap.has(a.id)) {
+                  achMap.set(a.id, a);
+                }
+              }
+              return Array.from(achMap.values());
+            })(),
+            stats: {
+              totalGrows: Math.max(serverProfile.stats.totalGrows ?? 0, localProfile.stats.totalGrows ?? 0),
+              completedGrows: Math.max(serverProfile.stats.completedGrows ?? 0, localProfile.stats.completedGrows ?? 0),
+              totalLogs: Math.max(serverProfile.stats.totalLogs ?? 0, localProfile.stats.totalLogs ?? 0),
+              totalPhotos: Math.max(serverProfile.stats.totalPhotos ?? 0, localProfile.stats.totalPhotos ?? 0),
+              totalAnalyses: Math.max(serverProfile.stats.totalAnalyses ?? 0, localProfile.stats.totalAnalyses ?? 0),
+              communityPosts: Math.max(serverProfile.stats.communityPosts ?? 0, localProfile.stats.communityPosts ?? 0),
+              daysActive: Math.max(serverProfile.stats.daysActive ?? 0, localProfile.stats.daysActive ?? 0),
+              firstGrowDate: serverProfile.stats.firstGrowDate || localProfile.stats.firstGrowDate,
+              totalWaterings: Math.max(serverProfile.stats.totalWaterings ?? 0, localProfile.stats.totalWaterings ?? 0),
+              totalNutrientFeedings: Math.max(serverProfile.stats.totalNutrientFeedings ?? 0, localProfile.stats.totalNutrientFeedings ?? 0),
+              totalHarvests: Math.max(serverProfile.stats.totalHarvests ?? 0, localProfile.stats.totalHarvests ?? 0),
+              longestStreak: Math.max(serverProfile.stats.longestStreak ?? 0, localProfile.stats.longestStreak ?? 0),
+              currentStreak: Math.max(serverProfile.stats.currentStreak ?? 0, localProfile.stats.currentStreak ?? 0),
+              totalComments: Math.max(serverProfile.stats.totalComments ?? 0, localProfile.stats.totalComments ?? 0),
+              totalLikes: Math.max(serverProfile.stats.totalLikes ?? 0, localProfile.stats.totalLikes ?? 0),
+              uniqueStrains: Math.max(serverProfile.stats.uniqueStrains ?? 0, localProfile.stats.uniqueStrains ?? 0),
+            },
+          };
+          await saveProfile(mergedProfile);
+          await syncGamificationToServer();
+        } else if (localProfile.xp > 0) {
+          await syncGamificationToServer();
+        }
+      }
+    } catch (err) {
+      console.log("Failed to sync from server:", err);
+    }
+  };
 
   const loadGrows = useCallback(async () => {
     try {
@@ -1240,15 +1381,28 @@ export default function GrowsScreen() {
 
   useFocusEffect(useCallback(() => { loadGrows(); }, [loadGrows]));
 
+  useEffect(() => {
+    if (isAuthenticated && !hasSyncedRef.current) {
+      hasSyncedRef.current = true;
+      syncFromServer();
+    }
+  }, [isAuthenticated]);
+
   const saveGrows = async (updated: Grow[]) => {
     setGrows(updated);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    if (isAuthenticated) {
+      syncGrowsToServer(updated);
+    }
   };
 
   const addGrow = async (grow: Grow) => {
     await saveGrows([grow, ...grows]);
     setShowAdd(false);
     await addXP(20, "totalGrows");
+    if (isAuthenticated) {
+      syncGamificationToServer();
+    }
   };
 
   const updateGrow = async (updated: Grow) => {

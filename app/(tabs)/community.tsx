@@ -26,17 +26,9 @@ import * as ImagePicker from "expo-image-picker";
 
 import { getApiUrl } from "@/lib/query-client";
 import { addXP } from "@/lib/gamification";
+import { useAuth } from "@/contexts/AuthContext";
 
 const C = Colors.dark;
-const PROFILE_PIC_KEY = "phynix_profile_pic";
-
-async function getProfilePic(): Promise<string | null> {
-  return AsyncStorage.getItem(PROFILE_PIC_KEY);
-}
-
-async function setProfilePic(base64: string): Promise<void> {
-  await AsyncStorage.setItem(PROFILE_PIC_KEY, base64);
-}
 
 async function pickProfilePic(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -140,10 +132,6 @@ async function getDeviceId(): Promise<string> {
   return id;
 }
 
-async function getGrowerName(): Promise<string> {
-  return (await AsyncStorage.getItem("phynix_grower_name")) || "";
-}
-
 function timeAgo(isoDate: string): string {
   const seconds = Math.floor((Date.now() - new Date(isoDate).getTime()) / 1000);
   if (seconds < 60) return "just now";
@@ -202,10 +190,12 @@ function CommentsSheet({
   post,
   onClose,
   myName,
+  userId,
 }: {
   post: Post;
   onClose: () => void;
   myName: string;
+  userId?: string;
 }) {
   const insets = useSafeAreaInsets();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -226,10 +216,10 @@ function CommentsSheet({
 
   const handleSend = async () => {
     if (!newComment.trim()) return;
-    if (!myName) { Alert.alert("Set Name", "Please share a post first to set your grower name."); return; }
+    if (!myName) { Alert.alert("Set Name", "Please log in to comment."); return; }
     setSending(true);
     try {
-      const deviceId = await getDeviceId();
+      const deviceId = userId || await getDeviceId();
       const url = new URL(`/api/community/posts/${post.id}/comments`, getApiUrl());
       const res = await globalThis.fetch(url.toString(), {
         method: "POST",
@@ -443,13 +433,14 @@ function NewPostModal({
   onClose,
   onPosted,
   defaultName,
+  userId,
 }: {
   onClose: () => void;
   onPosted: () => void;
   defaultName: string;
+  userId?: string;
 }) {
   const insets = useSafeAreaInsets();
-  const [growerName, setGrowerName] = useState(defaultName);
   const [strain, setStrain] = useState("");
   const [stage, setStage] = useState("Seedling");
   const [title, setTitle] = useState("");
@@ -468,26 +459,26 @@ function NewPostModal({
   };
 
   const handlePost = async () => {
-    if (!growerName.trim()) { Alert.alert("Error", "Enter your grower name"); return; }
+    if (!defaultName.trim()) { Alert.alert("Error", "Please log in to post"); return; }
     if (!title.trim()) { Alert.alert("Error", "Enter a title"); return; }
     if (!description.trim()) { Alert.alert("Error", "Add a description"); return; }
 
     setPosting(true);
     try {
-      await AsyncStorage.setItem("phynix_grower_name", growerName.trim());
-      const deviceId = await getDeviceId();
+      const deviceId = userId || await getDeviceId();
       const url = new URL("/api/community/posts", getApiUrl());
       const res = await globalThis.fetch(url.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          growerName: growerName.trim(),
+          growerName: defaultName.trim(),
           strain: strain.trim() || "Unknown",
           stage,
           title: title.trim(),
           description: description.trim(),
           imageBase64: imageBase64 || null,
           deviceId,
+          userId: userId || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to post");
@@ -524,14 +515,8 @@ function NewPostModal({
           keyboardShouldPersistTaps="handled"
         >
           <View style={npStyles.nameRow}>
-            <ProfilePicView name={growerName} size={42} />
-            <TextInput
-              style={npStyles.nameInput}
-              value={growerName}
-              onChangeText={setGrowerName}
-              placeholder="Your grower name"
-              placeholderTextColor={C.textMuted}
-            />
+            <ProfilePicView name={defaultName} size={42} />
+            <Text style={npStyles.nameDisplay}>{defaultName || "Anonymous"}</Text>
           </View>
 
           <TextInput
@@ -615,6 +600,7 @@ function GrowerProfileModal({
   myName,
   isFollowing,
   onComments,
+  userId,
 }: {
   growerName: string;
   onClose: () => void;
@@ -623,6 +609,7 @@ function GrowerProfileModal({
   myName: string;
   isFollowing: boolean;
   onComments: (post: Post) => void;
+  userId?: string;
 }) {
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<GrowerProfile | null>(null);
@@ -632,14 +619,14 @@ function GrowerProfileModal({
   useEffect(() => {
     (async () => {
       try {
-        const deviceId = await getDeviceId();
+        const deviceId = userId || await getDeviceId();
         const url = new URL(`/api/community/grower/${encodeURIComponent(growerName)}`, getApiUrl());
         url.searchParams.set("deviceId", deviceId);
         const res = await globalThis.fetch(url.toString());
         if (res.ok) setProfile(await res.json());
       } catch {} finally { setLoading(false); }
     })();
-  }, [growerName]);
+  }, [growerName, userId]);
 
   const isMine = growerName === myName && !!myName;
 
@@ -735,14 +722,183 @@ function GrowerProfileModal({
   );
 }
 
+function MyProfileSettingsModal({
+  onClose,
+  totalPosts,
+}: {
+  onClose: () => void;
+  totalPosts: number;
+}) {
+  const insets = useSafeAreaInsets();
+  const { user, logout, updateProfile } = useAuth();
+  const [editName, setEditName] = useState(user?.display_name || "");
+  const [editBio, setEditBio] = useState(user?.bio || "");
+  const [saving, setSaving] = useState(false);
+  const [pickingPic, setPickingPic] = useState(false);
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  const handlePickProfilePic = async () => {
+    setPickingPic(true);
+    try {
+      const base64 = await pickProfilePic();
+      if (base64) {
+        const result = await updateProfile({ profilePic: base64 });
+        if (!result.success) {
+          Alert.alert("Error", result.error || "Failed to update profile picture.");
+        }
+      }
+    } finally { setPickingPic(false); }
+  };
+
+  const handleSave = async () => {
+    if (!editName.trim()) {
+      Alert.alert("Error", "Display name cannot be empty.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await updateProfile({
+        displayName: editName.trim(),
+        bio: editBio.trim(),
+      });
+      if (result.success) {
+        Alert.alert("Saved", "Profile updated successfully.");
+      } else {
+        Alert.alert("Error", result.error || "Failed to update profile.");
+      }
+    } finally { setSaving(false); }
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          onClose();
+        },
+      },
+    ]);
+  };
+
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    : "Unknown";
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet">
+      <KeyboardAvoidingView
+        style={[settingsStyles.container, { backgroundColor: C.background }]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={[settingsStyles.header, { paddingTop: topPad + 8 }]}>
+          <Pressable onPress={onClose}>
+            <Ionicons name="close" size={24} color={C.textSecondary} />
+          </Pressable>
+          <Text style={settingsStyles.headerTitle}>Profile & Settings</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        <ScrollView
+          contentContainerStyle={[settingsStyles.content, { paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 40 }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={settingsStyles.picSection}>
+            <Pressable onPress={handlePickProfilePic} disabled={pickingPic}>
+              {pickingPic ? (
+                <View style={settingsStyles.picLoading}>
+                  <ActivityIndicator color={C.tint} />
+                </View>
+              ) : (
+                <View>
+                  <ProfilePicView base64={user?.profile_pic} name={user?.display_name || ""} size={88} />
+                  <View style={settingsStyles.picEditBadge}>
+                    <Ionicons name="camera" size={14} color="#fff" />
+                  </View>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
+          <View style={settingsStyles.statsRow}>
+            <View style={settingsStyles.statItem}>
+              <Text style={settingsStyles.statValue}>{totalPosts}</Text>
+              <Text style={settingsStyles.statLabel}>{totalPosts === 1 ? "Post" : "Posts"}</Text>
+            </View>
+            <View style={settingsStyles.statItem}>
+              <Text style={settingsStyles.statValue}>{memberSince}</Text>
+              <Text style={settingsStyles.statLabel}>Member since</Text>
+            </View>
+          </View>
+
+          <View style={settingsStyles.fieldGroup}>
+            <Text style={settingsStyles.fieldLabel}>Display Name</Text>
+            <TextInput
+              style={settingsStyles.fieldInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Your display name"
+              placeholderTextColor={C.textMuted}
+              maxLength={50}
+            />
+          </View>
+
+          <View style={settingsStyles.fieldGroup}>
+            <Text style={settingsStyles.fieldLabel}>Email</Text>
+            <View style={settingsStyles.fieldReadOnly}>
+              <Text style={settingsStyles.fieldReadOnlyText}>{user?.email || ""}</Text>
+              <Ionicons name="lock-closed-outline" size={14} color={C.textMuted} />
+            </View>
+          </View>
+
+          <View style={settingsStyles.fieldGroup}>
+            <Text style={settingsStyles.fieldLabel}>Bio</Text>
+            <TextInput
+              style={[settingsStyles.fieldInput, { minHeight: 80, textAlignVertical: "top" as const }]}
+              value={editBio}
+              onChangeText={setEditBio}
+              placeholder="Tell the community about yourself..."
+              placeholderTextColor={C.textMuted}
+              multiline
+              maxLength={300}
+            />
+          </View>
+
+          <Pressable
+            style={[settingsStyles.saveBtn, saving && { opacity: 0.5 }]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <Text style={settingsStyles.saveBtnText}>Save Profile</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable style={settingsStyles.logoutBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={18} color="#ef5350" />
+            <Text style={settingsStyles.logoutBtnText}>Log Out</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
+  const { user, isAuthenticated } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showNewPost, setShowNewPost] = useState(false);
-  const [myName, setMyName] = useState("");
-  const [myProfilePic, setMyProfilePic] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState("");
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "following">("all");
@@ -751,16 +907,26 @@ export default function CommunityScreen() {
   const [searchResults, setSearchResults] = useState<Post[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [fallbackName, setFallbackName] = useState("");
+  const [fallbackPic, setFallbackPic] = useState<string | null>(null);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  const myName = isAuthenticated && user ? user.display_name : fallbackName;
+  const myProfilePic = isAuthenticated && user ? user.profile_pic : fallbackPic;
+  const effectiveUserId = isAuthenticated && user ? user.id : undefined;
 
   const fetchPosts = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     setError("");
     try {
-      const deviceId = await getDeviceId();
-      const [name, pic] = await Promise.all([getGrowerName(), getProfilePic()]);
-      setMyName(name);
-      setMyProfilePic(pic);
+      const deviceId = effectiveUserId || await getDeviceId();
+
+      if (!isAuthenticated) {
+        const name = (await AsyncStorage.getItem("phynix_grower_name")) || "";
+        const pic = await AsyncStorage.getItem("phynix_profile_pic");
+        setFallbackName(name);
+        setFallbackPic(pic);
+      }
 
       const [postsRes, followsRes] = await Promise.all([
         globalThis.fetch(new URL(`/api/community/posts?deviceId=${encodeURIComponent(deviceId)}`, getApiUrl()).toString()),
@@ -778,7 +944,7 @@ export default function CommunityScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [effectiveUserId, isAuthenticated]);
 
   useFocusEffect(useCallback(() => { fetchPosts(); }, [fetchPosts]));
 
@@ -792,25 +958,29 @@ export default function CommunityScreen() {
     }
     setSearchLoading(true);
     try {
-      const deviceId = await getDeviceId();
+      const deviceId = effectiveUserId || await getDeviceId();
       const url = new URL("/api/community/search", getApiUrl());
       url.searchParams.set("q", query.trim());
       url.searchParams.set("deviceId", deviceId);
       const res = await globalThis.fetch(url.toString());
       if (res.ok) setSearchResults(await res.json());
     } catch {} finally { setSearchLoading(false); }
-  }, []);
+  }, [effectiveUserId]);
 
   const handleProfilePic = async () => {
-    const base64 = await pickProfilePic();
-    if (base64) {
-      setMyProfilePic(base64);
-      await setProfilePic(base64);
+    if (isAuthenticated) {
+      setShowSettings(true);
+    } else {
+      const base64 = await pickProfilePic();
+      if (base64) {
+        setFallbackPic(base64);
+        await AsyncStorage.setItem("phynix_profile_pic", base64);
+      }
     }
   };
 
   const handleLike = async (postId: number) => {
-    const deviceId = await getDeviceId();
+    const deviceId = effectiveUserId || await getDeviceId();
     setPosts(prev => prev.map(p =>
       p.id === postId ? { ...p, liked_by_me: !p.liked_by_me, likes: p.liked_by_me ? p.likes - 1 : p.likes + 1 } : p
     ));
@@ -825,7 +995,7 @@ export default function CommunityScreen() {
   };
 
   const handleFollow = async (growerName: string) => {
-    const deviceId = await getDeviceId();
+    const deviceId = effectiveUserId || await getDeviceId();
     const wasFollowing = following.has(growerName);
     setFollowing(prev => {
       const next = new Set(prev);
@@ -844,7 +1014,7 @@ export default function CommunityScreen() {
 
   const handleRepost = async (post: Post) => {
     if (!myName) {
-      Alert.alert("Set Name", "Please create a post first to set your grower name.");
+      Alert.alert("Set Name", "Please log in to repost.");
       return;
     }
     Alert.alert("Share to Feed", `Repost "${post.title}" by ${post.grower_name}?`, [
@@ -853,7 +1023,7 @@ export default function CommunityScreen() {
         text: "Repost",
         onPress: async () => {
           try {
-            const deviceId = await getDeviceId();
+            const deviceId = effectiveUserId || await getDeviceId();
             const url = new URL("/api/community/posts", getApiUrl());
             await globalThis.fetch(url.toString(), {
               method: "POST",
@@ -866,6 +1036,7 @@ export default function CommunityScreen() {
                 description: post.description,
                 imageBase64: post.image_base64 || null,
                 deviceId,
+                userId: effectiveUserId || undefined,
                 shared_from: post.grower_name,
                 original_post_id: post.id,
               }),
@@ -894,6 +1065,8 @@ export default function CommunityScreen() {
     ]);
   };
 
+  const myPostCount = posts.filter(p => p.grower_name === myName).length;
+
   const filteredPosts = filter === "following"
     ? posts.filter(p => following.has(p.grower_name) || p.grower_name === myName)
     : posts;
@@ -916,13 +1089,20 @@ export default function CommunityScreen() {
               <View>
                 <Text style={styles.headerTitle}>Community</Text>
                 <Text style={styles.headerSub}>
-                  {posts.length} post{posts.length !== 1 ? "s" : ""} {following.size > 0 ? `· ${following.size} following` : ""}
+                  {posts.length} post{posts.length !== 1 ? "s" : ""} {following.size > 0 ? `/ ${following.size} following` : ""}
                 </Text>
               </View>
             </View>
-            <Pressable style={styles.shareBtn} onPress={() => setShowNewPost(true)}>
-              <Ionicons name="add" size={22} color="#fff" />
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              {isAuthenticated && (
+                <Pressable style={styles.settingsBtn} onPress={() => setShowSettings(true)}>
+                  <Ionicons name="settings-outline" size={22} color={C.textSecondary} />
+                </Pressable>
+              )}
+              <Pressable style={styles.shareBtn} onPress={() => setShowNewPost(true)}>
+                <Ionicons name="add" size={22} color="#fff" />
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.searchBar}>
@@ -1016,6 +1196,7 @@ export default function CommunityScreen() {
           onClose={() => setShowNewPost(false)}
           onPosted={() => fetchPosts(true)}
           defaultName={myName}
+          userId={effectiveUserId}
         />
       )}
       {commentPost && (
@@ -1023,6 +1204,7 @@ export default function CommunityScreen() {
           post={commentPost}
           onClose={() => { setCommentPost(null); fetchPosts(true); }}
           myName={myName}
+          userId={effectiveUserId}
         />
       )}
       {profileName && (
@@ -1034,6 +1216,13 @@ export default function CommunityScreen() {
           myName={myName}
           isFollowing={following.has(profileName)}
           onComments={setCommentPost}
+          userId={effectiveUserId}
+        />
+      )}
+      {showSettings && (
+        <MyProfileSettingsModal
+          onClose={() => setShowSettings(false)}
+          totalPosts={myPostCount}
         />
       )}
     </View>
@@ -1047,6 +1236,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: "Nunito_800ExtraBold", fontSize: 30, color: C.text },
   headerSub: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 2 },
   shareBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.tint, alignItems: "center", justifyContent: "center" },
+  settingsBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   filterRow: { flexDirection: "row", gap: 8 },
   filterChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -1124,7 +1314,7 @@ const npStyles = StyleSheet.create({
   postHeaderBtnText: { fontFamily: "Nunito_700Bold", fontSize: 14, color: "#fff" },
   content: { padding: 16, gap: 14 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  nameInput: { flex: 1, fontFamily: "Nunito_600SemiBold", fontSize: 15, color: C.text, borderBottomWidth: 1, borderBottomColor: C.cardBorder, paddingVertical: 8 },
+  nameDisplay: { flex: 1, fontFamily: "Nunito_600SemiBold", fontSize: 15, color: C.text, paddingVertical: 8 },
   titleInput: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text, paddingVertical: 8 },
   descInput: { fontFamily: "Nunito_400Regular", fontSize: 15, color: C.text, minHeight: 80, textAlignVertical: "top" as const },
   metaSection: { gap: 10, backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.cardBorder },
@@ -1162,3 +1352,25 @@ const profileStyles = StyleSheet.create({
   miniDesc: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19, marginTop: 6 },
 });
 
+const settingsStyles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
+  headerTitle: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text },
+  content: { padding: 20, gap: 20 },
+  picSection: { alignItems: "center", paddingVertical: 8 },
+  picLoading: { width: 88, height: 88, borderRadius: 44, backgroundColor: C.backgroundTertiary, alignItems: "center", justifyContent: "center" },
+  picEditBadge: { position: "absolute", bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: C.tint, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.background },
+  statsRow: { flexDirection: "row", justifyContent: "center", gap: 40, paddingVertical: 8 },
+  statItem: { alignItems: "center" },
+  statValue: { fontFamily: "Nunito_700Bold", fontSize: 16, color: C.text },
+  statLabel: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
+  fieldGroup: { gap: 6 },
+  fieldLabel: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.textSecondary },
+  fieldInput: { fontFamily: "Nunito_400Regular", fontSize: 15, color: C.text, backgroundColor: C.card, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.cardBorder },
+  fieldReadOnly: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.backgroundTertiary, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.cardBorder },
+  fieldReadOnlyText: { fontFamily: "Nunito_400Regular", fontSize: 15, color: C.textMuted },
+  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.tint, paddingVertical: 14, borderRadius: 14 },
+  saveBtnText: { fontFamily: "Nunito_700Bold", fontSize: 15, color: "#fff" },
+  logoutBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.backgroundTertiary, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: "#ef535033" },
+  logoutBtnText: { fontFamily: "Nunito_700Bold", fontSize: 15, color: "#ef5350" },
+});
