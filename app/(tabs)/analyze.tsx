@@ -14,9 +14,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
 import { getApiUrl } from "@/lib/query-client";
+import { addXP } from "@/lib/gamification";
 
 const C = Colors.dark;
 
@@ -91,28 +91,11 @@ const hbStyles = StyleSheet.create({
   score: { fontFamily: "Nunito_700Bold", fontSize: 14, minWidth: 50 },
 });
 
-async function getImageBase64(uri: string): Promise<string> {
-  if (Platform.OS === "web") {
-    const response = await globalThis.fetch(uri);
-    const blob = await response.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-  return FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-}
 
 export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
   const [image, setImage] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<PlantAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,11 +111,12 @@ export default function AnalyzeScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         quality: 0.7,
-        base64: false,
+        base64: true,
         allowsEditing: false,
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         setImage(result.assets[0].uri);
+        setImageBase64(result.assets[0].base64 ?? null);
         setAnalysis(null);
         setError(null);
       }
@@ -151,11 +135,12 @@ export default function AnalyzeScreen() {
       }
       const result = await ImagePicker.launchCameraAsync({
         quality: 0.7,
-        base64: false,
+        base64: true,
         allowsEditing: false,
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         setImage(result.assets[0].uri);
+        setImageBase64(result.assets[0].base64 ?? null);
         setAnalysis(null);
         setError(null);
       }
@@ -166,18 +151,17 @@ export default function AnalyzeScreen() {
   };
 
   const analyzeImage = async () => {
-    if (!image) return;
+    if (!image || !imageBase64) return;
     setLoading(true);
     setError(null);
 
     try {
-      const base64 = await getImageBase64(image);
       const url = new URL("/api/analyze-plant", getApiUrl());
 
       const res = await globalThis.fetch(url.toString(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64 }),
+        body: JSON.stringify({ imageBase64: imageBase64 }),
       });
 
       if (!res.ok) {
@@ -187,6 +171,7 @@ export default function AnalyzeScreen() {
 
       const data = await res.json();
       setAnalysis(data);
+      addXP(15, "totalAnalyses").catch(() => {});
     } catch (err: any) {
       console.error("Analysis error:", err);
       setError(err?.message || "Failed to analyze plant. Please try again.");
@@ -248,7 +233,7 @@ export default function AnalyzeScreen() {
             <>
               <View style={styles.imageContainer}>
                 <Image source={{ uri: image }} style={styles.plantImage} resizeMode="cover" />
-                <Pressable style={styles.changeBtn} onPress={() => { setImage(null); setAnalysis(null); setError(null); }}>
+                <Pressable style={styles.changeBtn} onPress={() => { setImage(null); setImageBase64(null); setAnalysis(null); setError(null); }}>
                   <Ionicons name="close-circle" size={28} color="#fff" />
                 </Pressable>
               </View>
@@ -431,7 +416,7 @@ export default function AnalyzeScreen() {
 
                   <Pressable
                     style={styles.newAnalysisBtn}
-                    onPress={() => { setImage(null); setAnalysis(null); setError(null); }}
+                    onPress={() => { setImage(null); setImageBase64(null); setAnalysis(null); setError(null); }}
                   >
                     <Ionicons name="camera-outline" size={18} color={C.textSecondary} />
                     <Text style={styles.newAnalysisBtnText}>Analyze Another Plant</Text>

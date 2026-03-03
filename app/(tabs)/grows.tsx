@@ -21,6 +21,7 @@ import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import { addXP, loadProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
+import VirtualPlant from "@/components/VirtualPlant";
 
 const C = Colors.dark;
 const STORAGE_KEY = "phynix_grows_v2";
@@ -529,6 +530,15 @@ function GrowDetailModal({
           contentContainerStyle={[detStyles.content, { paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 40 }]}
           keyboardShouldPersistTaps="handled"
         >
+          <VirtualPlant
+            stage={currentGrow.stage}
+            noteCount={currentGrow.notes.length}
+            photoCount={currentGrow.notes.filter(n => !!n.imageBase64).length}
+            daysSinceLastLog={currentGrow.notes.length > 0 ? Math.floor((Date.now() - new Date(currentGrow.notes[0].dateTime).getTime()) / (1000 * 60 * 60 * 24)) : days}
+            recentLogCount={currentGrow.notes.filter(n => (Date.now() - new Date(n.dateTime).getTime()) < 7 * 24 * 60 * 60 * 1000).length}
+            daysRunning={days}
+          />
+
           {activeTab === "log" && (
             <>
               <Text style={detStyles.sectionTitle}>Update Stage</Text>

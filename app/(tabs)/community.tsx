@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,21 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import { getApiUrl } from "@/lib/query-client";
 import { addXP } from "@/lib/gamification";
+
+const AVATAR_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
+  "leaf", "flower", "rose", "nutrition", "water",
+  "sunny", "rainy", "flask", "bug", "earth",
+  "planet", "sparkles", "star", "diamond", "ribbon",
+  "heart", "flame", "flash", "cloudy", "moon",
+];
+
+async function getAvatarIcon(): Promise<string> {
+  return (await AsyncStorage.getItem("phynix_avatar_icon")) || "leaf";
+}
+
+async function setAvatarIcon(icon: string): Promise<void> {
+  await AsyncStorage.setItem("phynix_avatar_icon", icon);
+}
 
 const C = Colors.dark;
 
@@ -244,6 +259,7 @@ function PostCard({
   myName,
   isFollowing,
   onComments,
+  onProfile,
 }: {
   post: Post;
   onLike: (id: number) => void;
@@ -252,6 +268,7 @@ function PostCard({
   myName: string;
   isFollowing: boolean;
   onComments: (post: Post) => void;
+  onProfile: (name: string) => void;
 }) {
   const [viewingImage, setViewingImage] = useState(false);
   const stageColor = STAGE_COLORS[post.stage] || C.tint;
@@ -268,13 +285,13 @@ function PostCard({
   return (
     <View style={cardStyles.card}>
       <View style={cardStyles.topRow}>
-        <View style={cardStyles.avatarWrap}>
-          <Text style={cardStyles.avatarText}>{post.grower_name.charAt(0).toUpperCase()}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
+        <Pressable style={cardStyles.avatarWrap} onPress={() => onProfile(post.grower_name)}>
+          <Ionicons name="leaf" size={20} color={C.tint} />
+        </Pressable>
+        <Pressable style={{ flex: 1 }} onPress={() => onProfile(post.grower_name)}>
           <Text style={cardStyles.growerName}>{post.grower_name}</Text>
           <Text style={cardStyles.timeAgo}>{timeAgo(post.created_at)}</Text>
-        </View>
+        </Pressable>
         {!isMine && (
           <Pressable
             style={[cardStyles.followBtn, isFollowing && cardStyles.followBtnActive]}
@@ -520,6 +537,188 @@ function NewPostModal({
   );
 }
 
+interface GrowerProfile {
+  growerName: string;
+  postCount: number;
+  joinDate: string | null;
+  posts: Post[];
+}
+
+function AvatarPickerModal({
+  onClose,
+  currentIcon,
+  onSelect,
+}: {
+  onClose: () => void;
+  currentIcon: string;
+  onSelect: (icon: string) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet">
+      <View style={[avatarStyles.container, { backgroundColor: C.background }]}>
+        <View style={[avatarStyles.header, { paddingTop: topPad + 8 }]}>
+          <Pressable onPress={onClose}>
+            <Ionicons name="close" size={24} color={C.textSecondary} />
+          </Pressable>
+          <Text style={avatarStyles.headerTitle}>Choose Avatar</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={avatarStyles.grid}>
+          {AVATAR_ICONS.map((icon) => (
+            <Pressable
+              key={icon}
+              style={[
+                avatarStyles.iconBtn,
+                currentIcon === icon && avatarStyles.iconBtnActive,
+              ]}
+              onPress={() => { onSelect(icon); onClose(); }}
+            >
+              <Ionicons
+                name={icon as any}
+                size={28}
+                color={currentIcon === icon ? "#fff" : C.tint}
+              />
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function GrowerProfileModal({
+  growerName,
+  onClose,
+  onLike,
+  onFollow,
+  myName,
+  isFollowing,
+  onComments,
+}: {
+  growerName: string;
+  onClose: () => void;
+  onLike: (id: number) => void;
+  onFollow: (name: string) => void;
+  myName: string;
+  isFollowing: boolean;
+  onComments: (post: Post) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [profile, setProfile] = useState<GrowerProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const deviceId = await getDeviceId();
+        const url = new URL(`/api/community/grower/${encodeURIComponent(growerName)}`, getApiUrl());
+        url.searchParams.set("deviceId", deviceId);
+        const res = await globalThis.fetch(url.toString());
+        if (res.ok) setProfile(await res.json());
+      } catch {} finally { setLoading(false); }
+    })();
+  }, [growerName]);
+
+  const isMine = growerName === myName && !!myName;
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet">
+      <View style={[profileStyles.container, { backgroundColor: C.background }]}>
+        <View style={[profileStyles.header, { paddingTop: topPad + 8 }]}>
+          <Pressable onPress={onClose}>
+            <Ionicons name="close" size={24} color={C.textSecondary} />
+          </Pressable>
+          <Text style={profileStyles.headerTitle}>Grower Profile</Text>
+          <View style={{ width: 24 }} />
+        </View>
+
+        {loading ? (
+          <ActivityIndicator color={C.tint} style={{ marginTop: 40 }} />
+        ) : !profile ? (
+          <View style={{ alignItems: "center", paddingVertical: 40 }}>
+            <Text style={{ color: C.textMuted, fontFamily: "Nunito_400Regular" }}>Could not load profile.</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={profileStyles.profileCard}>
+              <View style={profileStyles.avatarLarge}>
+                <Ionicons name="leaf" size={36} color={C.tint} />
+              </View>
+              <Text style={profileStyles.name}>{profile.growerName}</Text>
+              <View style={profileStyles.statsRow}>
+                <View style={profileStyles.statItem}>
+                  <Text style={profileStyles.statValue}>{profile.postCount}</Text>
+                  <Text style={profileStyles.statLabel}>{profile.postCount === 1 ? "Post" : "Posts"}</Text>
+                </View>
+                {profile.joinDate && (
+                  <View style={profileStyles.statItem}>
+                    <Text style={profileStyles.statValue}>{new Date(profile.joinDate).toLocaleDateString(undefined, { month: "short", year: "numeric" })}</Text>
+                    <Text style={profileStyles.statLabel}>Joined</Text>
+                  </View>
+                )}
+              </View>
+              {!isMine && (
+                <Pressable
+                  style={[profileStyles.followProfileBtn, isFollowing && profileStyles.followProfileBtnActive]}
+                  onPress={() => onFollow(growerName)}
+                >
+                  <Ionicons name={isFollowing ? "checkmark" : "person-add-outline"} size={16} color={isFollowing ? C.tint : "#fff"} />
+                  <Text style={[profileStyles.followProfileText, isFollowing && { color: C.tint }]}>
+                    {isFollowing ? "Following" : "Follow"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
+            <Text style={profileStyles.sectionTitle}>Recent Posts</Text>
+            {profile.posts.length === 0 ? (
+              <View style={{ alignItems: "center", paddingVertical: 20 }}>
+                <Text style={{ color: C.textMuted, fontFamily: "Nunito_400Regular" }}>No posts yet.</Text>
+              </View>
+            ) : (
+              <View style={{ padding: 16, gap: 12 }}>
+                {profile.posts.map((post) => (
+                  <View key={post.id} style={profileStyles.miniPost}>
+                    <Text style={profileStyles.miniTitle}>{post.title}</Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                      <View style={[cardStyles.tag, { backgroundColor: (STAGE_COLORS[post.stage] || C.tint) + "15", borderColor: (STAGE_COLORS[post.stage] || C.tint) + "33" }]}>
+                        <View style={[cardStyles.tagDot, { backgroundColor: STAGE_COLORS[post.stage] || C.tint }]} />
+                        <Text style={[cardStyles.tagText, { color: STAGE_COLORS[post.stage] || C.tint }]}>{post.stage}</Text>
+                      </View>
+                      {post.strain !== "Unknown" && (
+                        <View style={cardStyles.tag}>
+                          <Ionicons name="leaf" size={11} color={C.tint} />
+                          <Text style={cardStyles.tagText}>{post.strain}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={profileStyles.miniDesc} numberOfLines={2}>{post.description}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 6 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Ionicons name="heart" size={14} color="#ef5350" />
+                        <Text style={{ color: C.textMuted, fontSize: 12, fontFamily: "Nunito_600SemiBold" }}>{post.likes}</Text>
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Ionicons name="chatbubble-outline" size={14} color={C.textMuted} />
+                        <Text style={{ color: C.textMuted, fontSize: 12, fontFamily: "Nunito_600SemiBold" }}>{post.comments_count}</Text>
+                      </View>
+                      <Text style={{ color: C.textMuted, fontSize: 11, fontFamily: "Nunito_400Regular" }}>{timeAgo(post.created_at)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -527,10 +726,16 @@ export default function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNewPost, setShowNewPost] = useState(false);
   const [myName, setMyName] = useState("");
+  const [myAvatarIcon, setMyAvatarIcon] = useState("leaf");
   const [error, setError] = useState("");
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "following">("all");
   const [commentPost, setCommentPost] = useState<Post | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Post[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [profileName, setProfileName] = useState<string | null>(null);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const fetchPosts = useCallback(async (quiet = false) => {
@@ -538,8 +743,9 @@ export default function CommunityScreen() {
     setError("");
     try {
       const deviceId = await getDeviceId();
-      const name = await getGrowerName();
+      const [name, avatar] = await Promise.all([getGrowerName(), getAvatarIcon()]);
       setMyName(name);
+      setMyAvatarIcon(avatar);
 
       const [postsRes, followsRes] = await Promise.all([
         globalThis.fetch(new URL(`/api/community/posts?deviceId=${encodeURIComponent(deviceId)}`, getApiUrl()).toString()),
@@ -562,6 +768,28 @@ export default function CommunityScreen() {
   useFocusEffect(useCallback(() => { fetchPosts(); }, [fetchPosts]));
 
   const handleRefresh = () => { setRefreshing(true); fetchPosts(true); };
+
+  const handleSearch = useCallback(async (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const deviceId = await getDeviceId();
+      const url = new URL("/api/community/search", getApiUrl());
+      url.searchParams.set("q", query.trim());
+      url.searchParams.set("deviceId", deviceId);
+      const res = await globalThis.fetch(url.toString());
+      if (res.ok) setSearchResults(await res.json());
+    } catch {} finally { setSearchLoading(false); }
+  }, []);
+
+  const handleAvatarSelect = async (icon: string) => {
+    setMyAvatarIcon(icon);
+    await setAvatarIcon(icon);
+  };
 
   const handleLike = async (postId: number) => {
     const deviceId = await getDeviceId();
@@ -615,26 +843,50 @@ export default function CommunityScreen() {
     ? posts.filter(p => following.has(p.grower_name) || p.grower_name === myName)
     : posts;
 
+  const displayPosts = searchResults !== null ? searchResults : filteredPosts;
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 118 : 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.tint} />}
       >
         <LinearGradient colors={["#0d2410", "#0a130b"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.headerTitle}>Community</Text>
-              <Text style={styles.headerSub}>
-                {posts.length} post{posts.length !== 1 ? "s" : ""} {following.size > 0 ? `· ${following.size} following` : ""}
-              </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Pressable style={styles.myAvatarBtn} onPress={() => setShowAvatarPicker(true)}>
+                <Ionicons name={myAvatarIcon as any} size={20} color={C.tint} />
+              </Pressable>
+              <View>
+                <Text style={styles.headerTitle}>Community</Text>
+                <Text style={styles.headerSub}>
+                  {posts.length} post{posts.length !== 1 ? "s" : ""} {following.size > 0 ? `· ${following.size} following` : ""}
+                </Text>
+              </View>
             </View>
             <Pressable style={styles.shareBtn} onPress={() => setShowNewPost(true)}>
               <Ionicons name="add" size={22} color="#fff" />
             </Pressable>
           </View>
+
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={16} color={C.textMuted} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              placeholder="Search growers..."
+              placeholderTextColor={C.textMuted}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => { setSearchQuery(""); setSearchResults(null); }}>
+                <Ionicons name="close-circle" size={18} color={C.textMuted} />
+              </Pressable>
+            )}
+          </View>
+
           <View style={styles.filterRow}>
             <Pressable style={[styles.filterChip, filter === "all" && styles.filterActive]} onPress={() => setFilter("all")}>
               <Ionicons name="earth-outline" size={14} color={filter === "all" ? "#fff" : C.textMuted} />
@@ -647,7 +899,12 @@ export default function CommunityScreen() {
           </View>
         </LinearGradient>
 
-        {loading ? (
+        {searchLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={C.tint} />
+            <Text style={styles.loadingText}>Searching...</Text>
+          </View>
+        ) : loading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator size="large" color={C.tint} />
             <Text style={styles.loadingText}>Loading feed...</Text>
@@ -660,16 +917,20 @@ export default function CommunityScreen() {
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
-        ) : filteredPosts.length === 0 ? (
+        ) : displayPosts.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name={filter === "following" ? "people-outline" : "leaf-outline"} size={48} color={C.textMuted} />
-            <Text style={styles.emptyTitle}>{filter === "following" ? "Follow Some Growers" : "Be the First!"}</Text>
+            <Ionicons name={searchResults !== null ? "search-outline" : filter === "following" ? "people-outline" : "leaf-outline"} size={48} color={C.textMuted} />
+            <Text style={styles.emptyTitle}>
+              {searchResults !== null ? "No Results" : filter === "following" ? "Follow Some Growers" : "Be the First!"}
+            </Text>
             <Text style={styles.emptyText}>
-              {filter === "following"
+              {searchResults !== null
+                ? `No growers found matching "${searchQuery}".`
+                : filter === "following"
                 ? "Follow growers to see their posts here."
                 : "Share your grow and inspire the community."}
             </Text>
-            {filter === "all" && (
+            {filter === "all" && searchResults === null && (
               <Pressable style={styles.shareNowBtn} onPress={() => setShowNewPost(true)}>
                 <Text style={styles.shareNowText}>Share Your Grow</Text>
               </Pressable>
@@ -677,7 +938,7 @@ export default function CommunityScreen() {
           </View>
         ) : (
           <View style={styles.feed}>
-            {filteredPosts.map((post) => (
+            {displayPosts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
@@ -687,6 +948,7 @@ export default function CommunityScreen() {
                 myName={myName}
                 isFollowing={following.has(post.grower_name)}
                 onComments={setCommentPost}
+                onProfile={setProfileName}
               />
             ))}
           </View>
@@ -705,6 +967,24 @@ export default function CommunityScreen() {
           post={commentPost}
           onClose={() => { setCommentPost(null); fetchPosts(true); }}
           myName={myName}
+        />
+      )}
+      {profileName && (
+        <GrowerProfileModal
+          growerName={profileName}
+          onClose={() => setProfileName(null)}
+          onLike={handleLike}
+          onFollow={handleFollow}
+          myName={myName}
+          isFollowing={following.has(profileName)}
+          onComments={setCommentPost}
+        />
+      )}
+      {showAvatarPicker && (
+        <AvatarPickerModal
+          onClose={() => setShowAvatarPicker(false)}
+          currentIcon={myAvatarIcon}
+          onSelect={handleAvatarSelect}
         />
       )}
     </View>
@@ -739,6 +1019,9 @@ const styles = StyleSheet.create({
   shareNowBtn: { backgroundColor: C.tint, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 8 },
   shareNowText: { fontFamily: "Nunito_700Bold", fontSize: 15, color: "#fff" },
   feed: { padding: 16, gap: 16 },
+  myAvatarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.tint + "55" },
+  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.backgroundTertiary, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12, borderWidth: 1, borderColor: C.cardBorder },
+  searchInput: { flex: 1, fontFamily: "Nunito_400Regular", fontSize: 14, color: C.text, paddingVertical: 2 },
 });
 
 const cardStyles = StyleSheet.create({
@@ -814,4 +1097,33 @@ const npStyles = StyleSheet.create({
   mediaBar: { flexDirection: "row", gap: 10 },
   mediaBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.card, borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: C.tint + "33", borderStyle: "dashed" as const },
   mediaBtnText: { fontFamily: "Nunito_600SemiBold", fontSize: 14, color: C.tint },
+});
+
+const profileStyles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
+  headerTitle: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text },
+  profileCard: { alignItems: "center", paddingVertical: 28, gap: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
+  avatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: C.tint + "55" },
+  name: { fontFamily: "Nunito_800ExtraBold", fontSize: 22, color: C.text },
+  statsRow: { flexDirection: "row", gap: 32, marginTop: 4 },
+  statItem: { alignItems: "center" },
+  statValue: { fontFamily: "Nunito_700Bold", fontSize: 16, color: C.text },
+  statLabel: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textMuted, marginTop: 2 },
+  followProfileBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.tint, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20, marginTop: 8 },
+  followProfileBtnActive: { backgroundColor: C.tint + "22", borderWidth: 1, borderColor: C.tint },
+  followProfileText: { fontFamily: "Nunito_700Bold", fontSize: 14, color: "#fff" },
+  sectionTitle: { fontFamily: "Nunito_700Bold", fontSize: 16, color: C.text, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 8 },
+  miniPost: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.cardBorder },
+  miniTitle: { fontFamily: "Nunito_700Bold", fontSize: 15, color: C.text },
+  miniDesc: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19, marginTop: 6 },
+});
+
+const avatarStyles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
+  headerTitle: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text },
+  grid: { flexDirection: "row", flexWrap: "wrap", padding: 16, gap: 12, justifyContent: "center" },
+  iconBtn: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.backgroundTertiary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.cardBorder },
+  iconBtnActive: { backgroundColor: C.tint, borderColor: C.tint },
 });

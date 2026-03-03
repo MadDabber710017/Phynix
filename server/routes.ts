@@ -220,6 +220,56 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
     }
   });
 
+  app.get("/api/community/grower/:name", async (req: Request, res: Response) => {
+    try {
+      const growerName = req.params.name;
+      const deviceId = (req.query.deviceId as string) || "";
+      if (!growerName) return res.status(400).json({ error: "Grower name required" });
+
+      const { rows: posts } = await pool.query(
+        `SELECT cp.*,
+          CASE WHEN pl.device_id IS NOT NULL THEN true ELSE false END as liked_by_me
+        FROM community_posts cp
+        LEFT JOIN post_likes pl ON cp.id = pl.post_id AND pl.device_id = $2
+        WHERE cp.grower_name = $1
+        ORDER BY cp.created_at DESC
+        LIMIT 50`,
+        [growerName, deviceId]
+      );
+
+      const postCount = posts.length;
+      const joinDate = posts.length > 0 ? posts[posts.length - 1].created_at : null;
+
+      res.json({ growerName, postCount, joinDate, posts });
+    } catch (error) {
+      console.error("Error fetching grower profile:", error);
+      res.status(500).json({ error: "Failed to fetch grower profile" });
+    }
+  });
+
+  app.get("/api/community/search", async (req: Request, res: Response) => {
+    try {
+      const query = (req.query.q as string) || "";
+      const deviceId = (req.query.deviceId as string) || "";
+      if (!query.trim()) return res.json([]);
+
+      const { rows } = await pool.query(
+        `SELECT cp.*,
+          CASE WHEN pl.device_id IS NOT NULL THEN true ELSE false END as liked_by_me
+        FROM community_posts cp
+        LEFT JOIN post_likes pl ON cp.id = pl.post_id AND pl.device_id = $2
+        WHERE LOWER(cp.grower_name) LIKE LOWER($1)
+        ORDER BY cp.created_at DESC
+        LIMIT 50`,
+        [`%${query.trim()}%`, deviceId]
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error("Error searching growers:", error);
+      res.status(500).json({ error: "Failed to search" });
+    }
+  });
+
   app.delete("/api/community/posts/:id", bodyParser, async (req: Request, res: Response) => {
     try {
       const postId = parseInt(req.params.id);
