@@ -19,7 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
+
 import { addXP, loadProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
 import VirtualPlant from "@/components/VirtualPlant";
 
@@ -99,8 +99,9 @@ function formatDate(isoDate: string): string {
 async function pickPhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: false, mediaTypes: ["images"] });
+  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: true, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
+  if (result.assets[0].base64) return result.assets[0].base64;
   const uri = result.assets[0].uri;
   if (Platform.OS === "web") {
     const res = await globalThis.fetch(uri);
@@ -112,14 +113,15 @@ async function pickPhoto(): Promise<string | null> {
       reader.readAsDataURL(blob);
     });
   }
-  return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  return null;
 }
 
 async function takePhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: false, mediaTypes: ["images"] });
+  const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
+  if (result.assets[0].base64) return result.assets[0].base64;
   const uri = result.assets[0].uri;
   if (Platform.OS === "web") {
     const res = await globalThis.fetch(uri);
@@ -131,7 +133,7 @@ async function takePhoto(): Promise<string | null> {
       reader.readAsDataURL(blob);
     });
   }
-  return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  return null;
 }
 
 function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Grow) => void }) {
