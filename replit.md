@@ -43,17 +43,16 @@ The analyzer provides exhaustive plant diagnostics:
 - Stored in AsyncStorage under "phynix_gamification_v1"
 
 ## Virtual Plant & Environment System
-- Realistic cannabis plant visualization with 10 distinct stages
-- Cannabis fan leaves with pointed leaflets, bud clusters with pistil hairs and trichome dots
-- Grow action effects: watering darkens soil, nutrients darken leaves, transplant enlarges pot, node/bud counts
-- Health indicator based on care frequency
-- Animated with react-native-reanimated
-- **8 Environment Types**: Indoor Tent, Indoor Room, Closet, Window Sill, Balcony, Outdoor Garden, Outdoor Field, Greenhouse
-  - Each renders a unique visual scene (tent frame, room corner, window with sunlight, sky gradient, railing, greenhouse glass panels, etc.)
-  - Outdoor Field shows background plant silhouettes when plantCount > 5
-  - Indoor environments show light fixtures and fans
-- Medium-specific pot colors (soil brown, coco reddish, hydro blue, rockwool gray, clay pebbles dots)
-- Light fixture types: LED panel, HPS bulb, CMH/LEC, CFL/T5 tubes, Natural/sun icon
+- **AI-generated realistic plant images** for all 10 growth stages (assets/images/plant-stages/)
+  - Germination, Seedling, Early/Late Veg, Pre-Flower, Early/Mid/Late Flower, Harvest Ready, Drying
+- **AI-generated environment backgrounds** for all 8 grow spaces (assets/images/environments/)
+  - Indoor Tent, Indoor Room, Closet, Window Sill, Balcony, Outdoor Garden, Outdoor Field, Greenhouse
+- Plant images composited over environment backgrounds with dark overlay for readability
+- Subtle animations: pulsing glow (stage color), plant breathing, floating trichome particles (flowering stages)
+- Info badges overlaid on scene: light schedule, plant count, medium type
+- Health indicator (Thriving/Healthy/Needs Care/Wilting) with colored icon
+- Stats bar: days running, waterings, nutrients, nodes, buds, transplants
+- Plant size scales dynamically with growth stage
 
 ## Harvest/Drying/Curing System
 - **Harvest**: Auto-records date, prompts for wet weight, awards 50 XP
