@@ -29,7 +29,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         messages: [
           {
             role: "system",
-            content: `You are an expert cannabis cultivation specialist with 20+ years of experience. Analyze cannabis plant images and provide detailed, accurate assessments. Always respond with valid JSON only, no markdown, no extra text.`,
+            content: `You are an elite cannabis cultivation diagnostician and plant pathologist with 25+ years of hands-on growing, breeding, and consulting experience. You have deep expertise in:
+- Plant sexing (male, female, hermaphrodite identification from preflowers, pollen sacs, pistils, nanners, bananas)
+- Nutrient science: all macro and micronutrient deficiencies and toxicities (N, P, K, Ca, Mg, Fe, S, Zn, Mn, B, Cu, Mo)
+- pH lockout diagnosis from leaf discoloration patterns
+- Integrated Pest Management: spider mites, fungus gnats, aphids, thrips, whiteflies, caterpillars, broad mites, root aphids
+- Plant diseases: powdery mildew, bud rot (botrytis), root rot (pythium), fusarium wilt, septoria leaf spot, tobacco mosaic virus, damping off
+- Light stress: light burn, foxtailing, stretching/etiolation, photo-bleaching
+- Water diagnosis: overwatering vs underwatering from leaf turgor, droopiness patterns, soil appearance
+- Temperature and humidity stress indicators (heat stress taco leaves, cold purpling, VPD issues)
+- Root health assessment from visible indicators
+- Training technique identification (topping, FIMming, LST, HST, mainlining, defoliation, lollipopping, supercropping, ScrOG, SOG)
+- Trichome development staging for harvest timing
+
+Analyze every image exhaustively. Identify ALL issues, no matter how minor. Be specific about what you see and why you diagnose it. Always respond with valid JSON only, no markdown, no extra text.`,
           },
           {
             role: "user",
@@ -40,27 +53,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
               {
                 type: "text",
-                text: `Analyze this cannabis plant image and return a JSON object with this exact structure:
+                text: `Analyze this cannabis plant image comprehensively and return a JSON object with this exact structure. Be thorough - check for EVERY possible issue:
+
 {
   "overallHealth": "Excellent|Good|Fair|Poor|Critical",
   "healthScore": <number 0-100>,
   "growthStage": "Germination|Seedling|Early Vegetative|Late Vegetative|Pre-Flower|Early Flower|Mid Flower|Late Flower|Harvest Ready|Curing",
   "stageWeeksEstimate": "<estimated weeks into current stage>",
   "estimatedWeeksToHarvest": "<number or null if not applicable>",
-  "observations": ["<specific observation>"],
-  "issues": [{"name": "<name>","severity": "Low|Medium|High","description": "<what you see>","fix": "<how to fix>"}],
+  "observations": ["<specific observation about what you see>"],
+  "issues": [{"name": "<issue name>", "severity": "Low|Medium|High", "description": "<what you see>", "fix": "<how to fix>"}],
   "positives": ["<thing that looks good>"],
   "recommendations": ["<actionable recommendation>"],
-  "nutrientStatus": {"nitrogen": "Deficient|Low|Optimal|High|Excess","phosphorus": "Deficient|Low|Optimal|High|Excess","potassium": "Deficient|Low|Optimal|High|Excess","overall": "<brief summary>"},
+  "nutrientStatus": {"nitrogen": "Deficient|Low|Optimal|High|Excess", "phosphorus": "Deficient|Low|Optimal|High|Excess", "potassium": "Deficient|Low|Optimal|High|Excess", "overall": "<brief summary>"},
   "environmentHints": "<any clues about growing environment>",
-  "funFact": "<interesting cannabis cultivation fact relevant to what you see>"
+  "funFact": "<interesting cannabis cultivation fact relevant to what you see>",
+
+  "sexIdentification": {
+    "sex": "Female|Male|Hermaphrodite|Too Early|Unknown",
+    "confidence": "High|Medium|Low",
+    "indicators": ["<what visual cues indicate the sex, e.g. pistils, pollen sacs, nanners, preflowers>"]
+  },
+
+  "nutrientDetails": [
+    {"nutrient": "Nitrogen", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Phosphorus", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Potassium", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Calcium", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Magnesium", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Iron", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Sulfur", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Zinc", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Manganese", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Boron", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Copper", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"},
+    {"nutrient": "Molybdenum", "status": "Deficient|Low|Optimal|High|Excess|Lockout", "symptoms": ["<visible symptoms if any>"], "fix": "<specific fix if not optimal>"}
+  ],
+
+  "pestAndDisease": [
+    {"name": "<pest or disease name>", "type": "Pest|Disease|Environmental", "severity": "Low|Medium|High|Critical", "symptoms": ["<what you see>"], "treatment": "<recommended treatment>", "prevention": "<how to prevent>"}
+  ],
+
+  "waterStatus": {
+    "status": "Overwatered|Underwatered|Optimal|Unknown",
+    "indicators": ["<what visual cues indicate water status>"]
+  },
+
+  "lightStatus": {
+    "status": "Too Much|Too Little|Optimal|Unknown",
+    "indicators": ["<what visual cues indicate light status, e.g. bleaching, stretching, foxtailing, tight internodes>"]
+  },
+
+  "rootHealth": {
+    "status": "Healthy|Concern|Problem|Unknown",
+    "indicators": ["<any visible root health indicators, root-bound signs, etc.>"]
+  },
+
+  "trainingObserved": ["<list of training techniques visible: Topped, FIMmed, LST, HST, Mainlined, Defoliated, Lollipopped, Supercropped, ScrOG, SOG, or None visible>"],
+
+  "trichomeStatus": {
+    "development": "Clear|Cloudy|Mixed|Amber|Not Visible",
+    "readiness": "<harvest timing recommendation based on trichome development>"
+  },
+
+  "overallDiagnosis": "<A comprehensive paragraph summarizing everything observed: the plant's sex, health, growth stage, any nutrient issues, pests, diseases, environmental concerns, training, trichome status, and top-priority actions the grower should take immediately>"
 }
-If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
+
+IMPORTANT RULES:
+- For nutrientDetails, always include ALL 12 nutrients even if they appear optimal.
+- For pestAndDisease, return an empty array [] if no pests or diseases are detected.
+- For trainingObserved, return ["None visible"] if no training techniques are apparent.
+- Be specific about symptoms - describe leaf color, position, pattern (e.g. "interveinal chlorosis on lower leaves" not just "yellowing").
+- If you cannot determine something from the image, use "Unknown" status with an indicator explaining why.
+- If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0, and explain in overallDiagnosis.`,
               },
             ],
           },
         ],
-        max_completion_tokens: 2000,
+        max_completion_tokens: 4000,
       });
 
       const content = response.choices[0]?.message?.content ?? "";

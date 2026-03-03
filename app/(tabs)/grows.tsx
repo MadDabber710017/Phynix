@@ -53,6 +53,11 @@ interface Equipment {
   otherGear: string;
 }
 
+interface BurpSchedule {
+  lastBurp?: string;
+  burpCount?: number;
+}
+
 interface Grow {
   id: string;
   name: string;
@@ -70,6 +75,16 @@ interface Grow {
   transplants?: number;
   nodeCount?: number;
   budCount?: number;
+  harvestDate?: string;
+  harvestWeight?: string;
+  dryWeight?: string;
+  cureStartDate?: string;
+  dryingDays?: number;
+  curingDays?: number;
+  dryingNotes?: string[];
+  curingNotes?: string[];
+  burpSchedule?: BurpSchedule;
+  finalCuredWeight?: string;
 }
 
 const STAGES = [
@@ -450,6 +465,9 @@ function GrowDetailModal({
   const [addingPhoto, setAddingPhoto] = useState(false);
   const [selectedNoteImages, setSelectedNoteImages] = useState<string[]>([]);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [harvestWeightInput, setHarvestWeightInput] = useState(grow.harvestWeight || "");
+  const [dryWeightInput, setDryWeightInput] = useState(grow.dryWeight || "");
+  const [curedWeightInput, setCuredWeightInput] = useState(grow.finalCuredWeight || "");
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const stageColor = STAGE_COLORS[currentGrow.stage] || C.tint;
 
@@ -501,8 +519,27 @@ function GrowDetailModal({
     await addXP(10, "totalLogs");
   };
 
-  const updateStage = (newStage: string) => {
-    const updated = { ...currentGrow, stage: newStage };
+  const updateStage = async (newStage: string) => {
+    let updated = { ...currentGrow, stage: newStage };
+    if (newStage === "Harvested" && !currentGrow.harvestDate) {
+      updated.harvestDate = new Date().toISOString();
+      updated.dryingDays = updated.dryingDays || 10;
+      await addXP(50, "totalHarvests");
+      Alert.prompt
+        ? Alert.prompt("Harvest Weight", "Enter wet harvest weight in grams:", (weight) => {
+            if (weight) {
+              const withWeight = { ...updated, harvestWeight: weight };
+              setCurrentGrow(withWeight);
+              onUpdate(withWeight);
+            }
+          }, "plain-text", "", "number-pad")
+        : Alert.alert("Harvested!", "Congratulations on your harvest! Update the wet weight in the drying tracker below.");
+    }
+    if (newStage === "Curing" && !currentGrow.cureStartDate) {
+      updated.cureStartDate = new Date().toISOString();
+      updated.curingDays = updated.curingDays || 30;
+      updated.burpSchedule = updated.burpSchedule || { burpCount: 0 };
+    }
     setCurrentGrow(updated);
     onUpdate(updated);
   };
@@ -631,6 +668,265 @@ function GrowDetailModal({
                   <Text style={[detStyles.quickActionText, { color: "#ab47bc" }]}>Bud</Text>
                 </Pressable>
               </ScrollView>
+
+              {currentGrow.stage === "Harvested" && (() => {
+                const dryingStart = currentGrow.harvestDate ? new Date(currentGrow.harvestDate) : new Date();
+                const daysDrying = Math.max(0, Math.floor((Date.now() - dryingStart.getTime()) / (1000 * 60 * 60 * 24)));
+                const targetDrying = currentGrow.dryingDays || 10;
+                const dryingProgress = Math.min(1, daysDrying / targetDrying);
+                return (
+                  <>
+                    <Text style={detStyles.sectionTitle}>Drying Tracker</Text>
+                    <View style={htStyles.trackerCard}>
+                      <View style={htStyles.trackerHeader}>
+                        <Ionicons name="sunny-outline" size={20} color="#ffa726" />
+                        <Text style={htStyles.trackerTitle}>Drying Progress</Text>
+                      </View>
+                      <View style={htStyles.progressBarBg}>
+                        <View style={[htStyles.progressBarFill, { width: `${dryingProgress * 100}%`, backgroundColor: "#ffa726" }]} />
+                      </View>
+                      <Text style={htStyles.progressText}>Days drying: {daysDrying} / {targetDrying}</Text>
+                      <View style={htStyles.conditionsCard}>
+                        <Ionicons name="information-circle-outline" size={16} color={C.tint} />
+                        <Text style={htStyles.conditionsText}>Optimal: 60-65F, 55-65% humidity, dark, gentle airflow</Text>
+                      </View>
+                      <View style={htStyles.weightRow}>
+                        <Text style={htStyles.weightLabel}>Wet Weight (g)</Text>
+                        <TextInput
+                          style={htStyles.weightInput}
+                          value={harvestWeightInput}
+                          onChangeText={setHarvestWeightInput}
+                          placeholder="0"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="numeric"
+                          onBlur={() => {
+                            if (harvestWeightInput !== currentGrow.harvestWeight) {
+                              const u = { ...currentGrow, harvestWeight: harvestWeightInput };
+                              setCurrentGrow(u);
+                              onUpdate(u);
+                            }
+                          }}
+                        />
+                      </View>
+                      <Text style={htStyles.quickLabel}>Quick Log</Text>
+                      <View style={htStyles.quickRow}>
+                        <Pressable style={htStyles.quickBtn} onPress={() => addNote("Checked stems - snap test", "drying")}>
+                          <Ionicons name="hand-left-outline" size={14} color="#ffa726" />
+                          <Text style={htStyles.quickBtnText}>Snap Test</Text>
+                        </Pressable>
+                        <Pressable style={htStyles.quickBtn} onPress={() => addNote("Trimmed buds", "drying")}>
+                          <Ionicons name="cut-outline" size={14} color="#ffa726" />
+                          <Text style={htStyles.quickBtnText}>Trim</Text>
+                        </Pressable>
+                        <Pressable style={htStyles.quickBtn} onPress={() => addNote("Adjusted drying environment", "drying")}>
+                          <Ionicons name="thermometer-outline" size={14} color="#ffa726" />
+                          <Text style={htStyles.quickBtnText}>Adjust Env</Text>
+                        </Pressable>
+                      </View>
+                      <View style={htStyles.weightRow}>
+                        <Text style={htStyles.weightLabel}>Dry Weight (g)</Text>
+                        <TextInput
+                          style={htStyles.weightInput}
+                          value={dryWeightInput}
+                          onChangeText={setDryWeightInput}
+                          placeholder="0"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <Pressable
+                        style={htStyles.moveBtn}
+                        onPress={() => {
+                          const u = {
+                            ...currentGrow,
+                            stage: "Curing",
+                            dryWeight: dryWeightInput || currentGrow.dryWeight,
+                            cureStartDate: new Date().toISOString(),
+                            curingDays: currentGrow.curingDays || 30,
+                            burpSchedule: currentGrow.burpSchedule || { burpCount: 0 },
+                          };
+                          setCurrentGrow(u);
+                          onUpdate(u);
+                        }}
+                      >
+                        <LinearGradient colors={["#8d6e63", "#5d4037"]} style={htStyles.moveBtnGrad}>
+                          <Ionicons name="arrow-forward" size={16} color="#fff" />
+                          <Text style={htStyles.moveBtnText}>Move to Curing</Text>
+                        </LinearGradient>
+                      </Pressable>
+                    </View>
+                  </>
+                );
+              })()}
+
+              {currentGrow.stage === "Curing" && (() => {
+                const curingStart = currentGrow.cureStartDate ? new Date(currentGrow.cureStartDate) : new Date();
+                const daysCuring = Math.max(0, Math.floor((Date.now() - curingStart.getTime()) / (1000 * 60 * 60 * 24)));
+                const targetCuring = currentGrow.curingDays || 30;
+                const curingProgress = Math.min(1, daysCuring / targetCuring);
+                const weekOfCure = Math.floor(daysCuring / 7) + 1;
+                const burpAdvice = weekOfCure <= 2 ? "Burp jars 2-3x daily for 15 min" : weekOfCure <= 4 ? "Burp 1x daily for 10 min" : "Burp every 2-3 days";
+                const lastBurp = currentGrow.burpSchedule?.lastBurp;
+                const burpCount = currentGrow.burpSchedule?.burpCount || 0;
+                const lastBurpText = lastBurp ? (() => {
+                  const mins = Math.floor((Date.now() - new Date(lastBurp).getTime()) / 60000);
+                  if (mins < 60) return `${mins}m ago`;
+                  const hrs = Math.floor(mins / 60);
+                  if (hrs < 24) return `${hrs}h ago`;
+                  return `${Math.floor(hrs / 24)}d ago`;
+                })() : "Never";
+                const milestones = [
+                  { weeks: 2, label: "Smokeable", color: "#ffa726" },
+                  { weeks: 4, label: "Good", color: "#66bb6a" },
+                  { weeks: 8, label: "Excellent", color: "#42a5f5" },
+                  { weeks: 12, label: "Premium", color: "#ab47bc" },
+                ];
+                return (
+                  <>
+                    <Text style={detStyles.sectionTitle}>Curing Tracker</Text>
+                    <View style={htStyles.trackerCard}>
+                      <View style={htStyles.trackerHeader}>
+                        <Ionicons name="time-outline" size={20} color="#8d6e63" />
+                        <Text style={htStyles.trackerTitle}>Curing Progress</Text>
+                      </View>
+                      <View style={htStyles.progressBarBg}>
+                        <View style={[htStyles.progressBarFill, { width: `${curingProgress * 100}%`, backgroundColor: "#8d6e63" }]} />
+                      </View>
+                      <Text style={htStyles.progressText}>Days curing: {daysCuring} / {targetCuring}</Text>
+                      <View style={htStyles.milestonesRow}>
+                        {milestones.map((m) => {
+                          const reached = daysCuring >= m.weeks * 7;
+                          return (
+                            <View key={m.label} style={[htStyles.milestone, reached && { borderColor: m.color, backgroundColor: m.color + "18" }]}>
+                              <Ionicons name={reached ? "checkmark-circle" : "ellipse-outline"} size={14} color={reached ? m.color : C.textMuted} />
+                              <Text style={[htStyles.milestoneText, reached && { color: m.color }]}>{m.weeks}w</Text>
+                              <Text style={[htStyles.milestoneLabel, reached && { color: m.color }]}>{m.label}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                      <View style={htStyles.burpSection}>
+                        <Text style={htStyles.burpAdvice}>{burpAdvice}</Text>
+                        <View style={htStyles.burpStats}>
+                          <Text style={htStyles.burpStatText}>Last burp: {lastBurpText}</Text>
+                          <Text style={htStyles.burpStatText}>Total burps: {burpCount}</Text>
+                        </View>
+                        <View style={htStyles.quickRow}>
+                          <Pressable style={[htStyles.quickBtn, { borderColor: "#8d6e63" }]} onPress={() => {
+                            const u = {
+                              ...currentGrow,
+                              burpSchedule: { lastBurp: new Date().toISOString(), burpCount: burpCount + 1 },
+                            };
+                            setCurrentGrow(u);
+                            onUpdate(u);
+                            addNote("Burped jars", "curing");
+                          }}>
+                            <Ionicons name="flask-outline" size={14} color="#8d6e63" />
+                            <Text style={[htStyles.quickBtnText, { color: "#8d6e63" }]}>Burp Jars</Text>
+                          </Pressable>
+                          <Pressable style={[htStyles.quickBtn, { borderColor: "#42a5f5" }]} onPress={() => addNote("Checked jar humidity", "curing")}>
+                            <Ionicons name="water-outline" size={14} color="#42a5f5" />
+                            <Text style={[htStyles.quickBtnText, { color: "#42a5f5" }]}>Check RH</Text>
+                          </Pressable>
+                          <Pressable style={[htStyles.quickBtn, { borderColor: "#66bb6a" }]} onPress={() => addNote("Added humidity pack", "curing")}>
+                            <Ionicons name="cube-outline" size={14} color="#66bb6a" />
+                            <Text style={[htStyles.quickBtnText, { color: "#66bb6a" }]}>Boveda</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                      <View style={htStyles.weightRow}>
+                        <Text style={htStyles.weightLabel}>Final Cured Weight (g)</Text>
+                        <TextInput
+                          style={htStyles.weightInput}
+                          value={curedWeightInput}
+                          onChangeText={setCuredWeightInput}
+                          placeholder="0"
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <Pressable
+                        style={htStyles.moveBtn}
+                        onPress={() => {
+                          const u = {
+                            ...currentGrow,
+                            stage: "Done",
+                            finalCuredWeight: curedWeightInput || currentGrow.finalCuredWeight,
+                          };
+                          setCurrentGrow(u);
+                          onUpdate(u);
+                        }}
+                      >
+                        <LinearGradient colors={["#546e7a", "#37474f"]} style={htStyles.moveBtnGrad}>
+                          <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                          <Text style={htStyles.moveBtnText}>Mark as Done</Text>
+                        </LinearGradient>
+                      </Pressable>
+                    </View>
+                  </>
+                );
+              })()}
+
+              {currentGrow.stage === "Done" && (() => {
+                const totalDays = getDaysRunning(currentGrow.startDate);
+                const wetWeight = parseFloat(currentGrow.harvestWeight || "0");
+                const dWeight = parseFloat(currentGrow.dryWeight || "0");
+                const curedWeight = parseFloat(currentGrow.finalCuredWeight || "0");
+                const weightLoss = wetWeight > 0 && dWeight > 0 ? (((wetWeight - dWeight) / wetWeight) * 100).toFixed(1) : null;
+                const curingDuration = currentGrow.cureStartDate
+                  ? Math.floor((Date.now() - new Date(currentGrow.cureStartDate).getTime()) / (1000 * 60 * 60 * 24))
+                  : 0;
+                return (
+                  <>
+                    <Text style={detStyles.sectionTitle}>Harvest Summary</Text>
+                    <View style={htStyles.summaryCard}>
+                      <View style={htStyles.summaryHeader}>
+                        <Ionicons name="trophy" size={24} color="#ffd54f" />
+                        <Text style={htStyles.summaryTitle}>Grow Complete</Text>
+                      </View>
+                      <View style={htStyles.summaryGrid}>
+                        <View style={htStyles.summaryItem}>
+                          <Text style={htStyles.summaryValue}>{totalDays}</Text>
+                          <Text style={htStyles.summaryLabel}>Total Days</Text>
+                        </View>
+                        {wetWeight > 0 && (
+                          <View style={htStyles.summaryItem}>
+                            <Text style={htStyles.summaryValue}>{wetWeight}g</Text>
+                            <Text style={htStyles.summaryLabel}>Wet Weight</Text>
+                          </View>
+                        )}
+                        {dWeight > 0 && (
+                          <View style={htStyles.summaryItem}>
+                            <Text style={htStyles.summaryValue}>{dWeight}g</Text>
+                            <Text style={htStyles.summaryLabel}>Dry Weight</Text>
+                          </View>
+                        )}
+                        {curedWeight > 0 && (
+                          <View style={htStyles.summaryItem}>
+                            <Text style={htStyles.summaryValue}>{curedWeight}g</Text>
+                            <Text style={htStyles.summaryLabel}>Cured Weight</Text>
+                          </View>
+                        )}
+                        {weightLoss && (
+                          <View style={htStyles.summaryItem}>
+                            <Text style={htStyles.summaryValue}>{weightLoss}%</Text>
+                            <Text style={htStyles.summaryLabel}>Weight Loss</Text>
+                          </View>
+                        )}
+                        {curingDuration > 0 && (
+                          <View style={htStyles.summaryItem}>
+                            <Text style={htStyles.summaryValue}>{curingDuration}d</Text>
+                            <Text style={htStyles.summaryLabel}>Cure Time</Text>
+                          </View>
+                        )}
+                      </View>
+                      {currentGrow.harvestDate && (
+                        <Text style={htStyles.summaryDate}>Harvested: {formatDate(currentGrow.harvestDate)}</Text>
+                      )}
+                    </View>
+                  </>
+                );
+              })()}
 
               <Text style={detStyles.sectionTitle}>Add Log Entry</Text>
               {selectedNoteImages.length > 0 && (
@@ -1061,4 +1357,41 @@ const detStyles = StyleSheet.create({
   imageViewer: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center" },
   fullImage: { width: "100%", height: "80%" },
   closeImageBtn: { position: "absolute", top: 60, right: 20 },
+});
+
+const htStyles = StyleSheet.create({
+  trackerCard: { backgroundColor: C.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: C.cardBorder, gap: 10 },
+  trackerHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  trackerTitle: { fontFamily: "Nunito_700Bold", fontSize: 15, color: C.text },
+  progressBarBg: { height: 8, backgroundColor: C.backgroundTertiary, borderRadius: 4, overflow: "hidden" },
+  progressBarFill: { height: 8, borderRadius: 4 },
+  progressText: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.textSecondary, textAlign: "center" },
+  conditionsCard: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.tint + "12", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: C.tint + "33" },
+  conditionsText: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textSecondary, flex: 1 },
+  weightRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  weightLabel: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.textSecondary },
+  weightInput: { width: 80, backgroundColor: C.backgroundTertiary, borderRadius: 10, padding: 8, fontFamily: "Nunito_700Bold", fontSize: 15, color: C.text, textAlign: "center", borderWidth: 1, borderColor: C.cardBorder },
+  quickLabel: { fontFamily: "Nunito_600SemiBold", fontSize: 12, color: C.textMuted },
+  quickRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  quickBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: "#ffa726", backgroundColor: C.backgroundTertiary },
+  quickBtnText: { fontFamily: "Nunito_600SemiBold", fontSize: 12, color: "#ffa726" },
+  moveBtn: { borderRadius: 12, overflow: "hidden", marginTop: 4 },
+  moveBtnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
+  moveBtnText: { fontFamily: "Nunito_700Bold", fontSize: 14, color: "#fff" },
+  burpSection: { gap: 8 },
+  burpAdvice: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: "#8d6e63", textAlign: "center" },
+  burpStats: { flexDirection: "row", justifyContent: "space-around" },
+  burpStatText: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textMuted },
+  milestonesRow: { flexDirection: "row", justifyContent: "space-between", gap: 6 },
+  milestone: { flex: 1, alignItems: "center", gap: 2, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.backgroundTertiary },
+  milestoneText: { fontFamily: "Nunito_700Bold", fontSize: 13, color: C.textMuted },
+  milestoneLabel: { fontFamily: "Nunito_400Regular", fontSize: 10, color: C.textMuted },
+  summaryCard: { backgroundColor: C.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#ffd54f44", gap: 12 },
+  summaryHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  summaryTitle: { fontFamily: "Nunito_800ExtraBold", fontSize: 18, color: "#ffd54f" },
+  summaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  summaryItem: { width: "30%" as any, alignItems: "center", backgroundColor: C.backgroundTertiary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 6 },
+  summaryValue: { fontFamily: "Nunito_800ExtraBold", fontSize: 18, color: C.text },
+  summaryLabel: { fontFamily: "Nunito_400Regular", fontSize: 11, color: C.textMuted, textAlign: "center" as const },
+  summaryDate: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textMuted, textAlign: "center" as const },
 });

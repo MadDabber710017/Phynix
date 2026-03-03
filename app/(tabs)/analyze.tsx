@@ -34,6 +34,38 @@ interface Issue {
   fix: string;
 }
 
+interface SexIdentification {
+  sex: "Female" | "Male" | "Hermaphrodite" | "Too Early" | "Unknown";
+  confidence: "High" | "Medium" | "Low";
+  indicators: string[];
+}
+
+interface NutrientDetail {
+  nutrient: string;
+  status: "Deficient" | "Low" | "Optimal" | "High" | "Excess" | "Lockout";
+  symptoms: string[];
+  fix: string;
+}
+
+interface PestDiseaseEntry {
+  name: string;
+  type: "Pest" | "Disease" | "Environmental";
+  severity: "Low" | "Medium" | "High" | "Critical";
+  symptoms: string[];
+  treatment: string;
+  prevention: string;
+}
+
+interface StatusIndicator {
+  status: string;
+  indicators: string[];
+}
+
+interface TrichomeStatus {
+  development: "Clear" | "Cloudy" | "Mixed" | "Amber" | "Not Visible";
+  readiness: string;
+}
+
 interface PlantAnalysis {
   overallHealth: string;
   healthScore: number;
@@ -47,6 +79,15 @@ interface PlantAnalysis {
   nutrientStatus: NutrientStatus;
   environmentHints: string;
   funFact: string;
+  sexIdentification?: SexIdentification;
+  nutrientDetails?: NutrientDetail[];
+  pestAndDisease?: PestDiseaseEntry[];
+  waterStatus?: StatusIndicator;
+  lightStatus?: StatusIndicator;
+  rootHealth?: StatusIndicator;
+  trainingObserved?: string[];
+  trichomeStatus?: TrichomeStatus;
+  overallDiagnosis?: string;
 }
 
 const HEALTH_COLORS: Record<string, string> = {
@@ -62,6 +103,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   Low: "#66bb6a",
   Medium: "#ffa726",
   High: "#ef5350",
+  Critical: "#b71c1c",
 };
 
 const NUTRIENT_COLORS: Record<string, string> = {
@@ -70,6 +112,41 @@ const NUTRIENT_COLORS: Record<string, string> = {
   Optimal: "#66bb6a",
   High: "#ab47bc",
   Excess: "#b71c1c",
+  Lockout: "#ff7043",
+};
+
+const SEX_COLORS: Record<string, string> = {
+  Female: "#e91e90",
+  Male: "#42a5f5",
+  Hermaphrodite: "#ff9800",
+  "Too Early": "#78909c",
+  Unknown: "#78909c",
+};
+
+const TRICHOME_COLORS: Record<string, string> = {
+  Clear: "#90caf9",
+  Cloudy: "#e0e0e0",
+  Mixed: "#ffe082",
+  Amber: "#ffb74d",
+  "Not Visible": "#78909c",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  Overwatered: "#42a5f5",
+  Underwatered: "#ff7043",
+  Optimal: "#66bb6a",
+  Unknown: "#78909c",
+  "Too Much": "#ef5350",
+  "Too Little": "#ffa726",
+  Healthy: "#66bb6a",
+  Concern: "#ffa726",
+  Problem: "#ef5350",
+};
+
+const PEST_TYPE_COLORS: Record<string, string> = {
+  Pest: "#ef5350",
+  Disease: "#ab47bc",
+  Environmental: "#ffa726",
 };
 
 function HealthBar({ score }: { score: number }) {
@@ -91,6 +168,150 @@ const hbStyles = StyleSheet.create({
   score: { fontFamily: "Nunito_700Bold", fontSize: 14, minWidth: 50 },
 });
 
+
+function NutrientDetailRow({ detail }: { detail: NutrientDetail }) {
+  const [expanded, setExpanded] = useState(false);
+  const color = NUTRIENT_COLORS[detail.status] || C.tint;
+  const hasDetails = (detail.symptoms && detail.symptoms.length > 0 && detail.symptoms[0] !== "") || (detail.fix && detail.fix !== "" && detail.status !== "Optimal");
+
+  return (
+    <Pressable onPress={() => hasDetails && setExpanded(!expanded)}>
+      <View style={ndStyles.row}>
+        <View style={[ndStyles.dot, { backgroundColor: color }]} />
+        <Text style={ndStyles.name}>{detail.nutrient}</Text>
+        <View style={[ndStyles.pill, { backgroundColor: color + "22" }]}>
+          <Text style={[ndStyles.pillText, { color }]}>{detail.status}</Text>
+        </View>
+        {hasDetails && (
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={C.textMuted} />
+        )}
+      </View>
+      {expanded && hasDetails && (
+        <View style={ndStyles.expandedBox}>
+          {detail.symptoms && detail.symptoms.length > 0 && detail.symptoms[0] !== "" && (
+            <View style={ndStyles.symptomsBox}>
+              {detail.symptoms.map((s, i) => (
+                <Text key={i} style={ndStyles.symptomText}>{s}</Text>
+              ))}
+            </View>
+          )}
+          {detail.fix && detail.fix !== "" && detail.status !== "Optimal" && (
+            <View style={ndStyles.fixRow}>
+              <Ionicons name="build-outline" size={12} color={C.accent} />
+              <Text style={ndStyles.fixText}>{detail.fix}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const ndStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  name: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.text, flex: 1 },
+  pill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  pillText: { fontFamily: "Nunito_700Bold", fontSize: 11 },
+  expandedBox: { paddingLeft: 16, paddingBottom: 6, gap: 4 },
+  symptomsBox: { gap: 2 },
+  symptomText: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textSecondary, lineHeight: 17 },
+  fixRow: { flexDirection: "row", gap: 6, alignItems: "flex-start", marginTop: 2 },
+  fixText: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.accent, flex: 1, lineHeight: 17 },
+});
+
+function TroubleshootingGuide({ analysis }: { analysis: PlantAnalysis }) {
+  const hasNutrientIssues = analysis.nutrientDetails?.some(n => n.status !== "Optimal") ?? false;
+  const hasPestDisease = (analysis.pestAndDisease?.length ?? 0) > 0;
+  const isMaleOrHerm = analysis.sexIdentification?.sex === "Male" || analysis.sexIdentification?.sex === "Hermaphrodite";
+
+  if (!hasNutrientIssues && !hasPestDisease && !isMaleOrHerm) return null;
+
+  const urgentNutrients = analysis.nutrientDetails?.filter(n => n.status === "Deficient" || n.status === "Excess" || n.status === "Lockout") ?? [];
+
+  return (
+    <View style={tsStyles.container}>
+      <View style={tsStyles.header}>
+        <Ionicons name="construct" size={20} color={C.accent} />
+        <Text style={tsStyles.title}>Troubleshooting Guide</Text>
+      </View>
+
+      {isMaleOrHerm && (
+        <View style={tsStyles.alertCard}>
+          <LinearGradient colors={["#ef535022", "#ef535008"]} style={tsStyles.alertGrad}>
+            <View style={tsStyles.alertHeader}>
+              <Ionicons name="alert-circle" size={18} color="#ef5350" />
+              <Text style={tsStyles.alertTitle}>Pollen Contamination Warning</Text>
+            </View>
+            <Text style={tsStyles.alertText}>
+              {analysis.sexIdentification?.sex === "Male"
+                ? "Male plant detected. Remove immediately from grow space to prevent pollination of female plants. Even one pollen sac can seed an entire room."
+                : "Hermaphrodite detected. Monitor closely and remove any pollen sacs (nanners/bananas) immediately. Consider isolating this plant to protect others."}
+            </Text>
+          </LinearGradient>
+        </View>
+      )}
+
+      {hasPestDisease && (
+        <View style={tsStyles.urgentCard}>
+          <LinearGradient colors={["#ab47bc22", "#ab47bc08"]} style={tsStyles.alertGrad}>
+            <View style={tsStyles.alertHeader}>
+              <Ionicons name="bug" size={18} color="#ab47bc" />
+              <Text style={[tsStyles.alertTitle, { color: "#ab47bc" }]}>Urgent Action Required</Text>
+            </View>
+            {analysis.pestAndDisease?.sort((a, b) => {
+              const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+              return (order[a.severity] ?? 3) - (order[b.severity] ?? 3);
+            }).map((pd, i) => (
+              <View key={i} style={tsStyles.urgentItem}>
+                <View style={[tsStyles.urgentDot, { backgroundColor: SEVERITY_COLORS[pd.severity] || C.danger }]} />
+                <Text style={tsStyles.urgentText}>
+                  <Text style={tsStyles.urgentBold}>{pd.name}</Text> ({pd.severity}) - {pd.treatment}
+                </Text>
+              </View>
+            ))}
+          </LinearGradient>
+        </View>
+      )}
+
+      {urgentNutrients.length > 0 && (
+        <View style={tsStyles.quickFixCard}>
+          <LinearGradient colors={["#ffa72622", "#ffa72608"]} style={tsStyles.alertGrad}>
+            <View style={tsStyles.alertHeader}>
+              <Ionicons name="flask" size={18} color={C.accent} />
+              <Text style={[tsStyles.alertTitle, { color: C.accent }]}>Quick Nutrient Fixes</Text>
+            </View>
+            {urgentNutrients.map((n, i) => (
+              <View key={i} style={tsStyles.urgentItem}>
+                <View style={[tsStyles.urgentDot, { backgroundColor: NUTRIENT_COLORS[n.status] || C.accent }]} />
+                <Text style={tsStyles.urgentText}>
+                  <Text style={tsStyles.urgentBold}>{n.nutrient}</Text> ({n.status}) - {n.fix}
+                </Text>
+              </View>
+            ))}
+          </LinearGradient>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const tsStyles = StyleSheet.create({
+  container: { gap: 10 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { fontFamily: "Nunito_700Bold", fontSize: 17, color: C.text },
+  alertCard: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#ef535044" },
+  urgentCard: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#ab47bc44" },
+  quickFixCard: { borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: C.accent + "44" },
+  alertGrad: { padding: 14, gap: 8 },
+  alertHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  alertTitle: { fontFamily: "Nunito_700Bold", fontSize: 14, color: "#ef5350" },
+  alertText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19 },
+  urgentItem: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  urgentDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
+  urgentText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, flex: 1, lineHeight: 19 },
+  urgentBold: { fontFamily: "Nunito_700Bold", color: C.text },
+});
 
 export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
@@ -392,6 +613,182 @@ export default function AnalyzeScreen() {
                     </View>
                   )}
 
+                  {analysis.sexIdentification && analysis.sexIdentification.sex !== "Unknown" && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Sex Identification</Text>
+                      <View style={[styles.sexCard, { borderColor: (SEX_COLORS[analysis.sexIdentification.sex] || C.tint) + "44" }]}>
+                        <LinearGradient colors={[(SEX_COLORS[analysis.sexIdentification.sex] || C.tint) + "18", "transparent"]} style={styles.sexCardGrad}>
+                          <View style={styles.sexHeaderRow}>
+                            <View style={[styles.sexBadge, { backgroundColor: (SEX_COLORS[analysis.sexIdentification.sex] || C.tint) + "22" }]}>
+                              <Ionicons name={analysis.sexIdentification.sex === "Female" ? "female" : analysis.sexIdentification.sex === "Male" ? "male" : "male-female"} size={28} color={SEX_COLORS[analysis.sexIdentification.sex] || C.tint} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.sexValue, { color: SEX_COLORS[analysis.sexIdentification.sex] || C.tint }]}>{analysis.sexIdentification.sex}</Text>
+                              <View style={[styles.confidencePill, { backgroundColor: (SEX_COLORS[analysis.sexIdentification.sex] || C.tint) + "18" }]}>
+                                <Text style={[styles.confidenceText, { color: SEX_COLORS[analysis.sexIdentification.sex] || C.tint }]}>{analysis.sexIdentification.confidence} Confidence</Text>
+                              </View>
+                            </View>
+                          </View>
+                          {analysis.sexIdentification.indicators.length > 0 && (
+                            <View style={styles.indicatorList}>
+                              {analysis.sexIdentification.indicators.map((ind, i) => (
+                                <View key={i} style={styles.indicatorItem}>
+                                  <Ionicons name="ellipse" size={6} color={SEX_COLORS[analysis.sexIdentification!.sex] || C.tint} />
+                                  <Text style={styles.indicatorText}>{ind}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </LinearGradient>
+                      </View>
+                    </View>
+                  )}
+
+                  {analysis.nutrientDetails && analysis.nutrientDetails.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Full Nutrient Panel</Text>
+                      <View style={styles.nutrientDetailBox}>
+                        {analysis.nutrientDetails.map((nd, i) => (
+                          <NutrientDetailRow key={i} detail={nd} />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {analysis.pestAndDisease && analysis.pestAndDisease.length > 0 && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Pest & Disease Detection</Text>
+                      {analysis.pestAndDisease.map((pd, i) => (
+                        <View key={i} style={[styles.pdCard, { borderLeftColor: PEST_TYPE_COLORS[pd.type] || C.danger }]}>
+                          <View style={styles.pdHeader}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.pdName}>{pd.name}</Text>
+                              <View style={styles.pdBadgeRow}>
+                                <View style={[styles.pdTypeBadge, { backgroundColor: (PEST_TYPE_COLORS[pd.type] || C.danger) + "22" }]}>
+                                  <Text style={[styles.pdTypeText, { color: PEST_TYPE_COLORS[pd.type] || C.danger }]}>{pd.type}</Text>
+                                </View>
+                                <View style={[styles.pdSevBadge, { backgroundColor: (SEVERITY_COLORS[pd.severity] || C.danger) + "22" }]}>
+                                  <Text style={[styles.pdSevText, { color: SEVERITY_COLORS[pd.severity] || C.danger }]}>{pd.severity}</Text>
+                                </View>
+                              </View>
+                            </View>
+                            <Ionicons name="warning" size={22} color={SEVERITY_COLORS[pd.severity] || C.danger} />
+                          </View>
+                          {pd.symptoms.length > 0 && (
+                            <View style={styles.pdSymptoms}>
+                              {pd.symptoms.map((s, si) => (
+                                <View key={si} style={styles.indicatorItem}>
+                                  <Ionicons name="ellipse" size={6} color={C.textMuted} />
+                                  <Text style={styles.indicatorText}>{s}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                          <View style={styles.pdTreatBox}>
+                            <Ionicons name="medkit-outline" size={14} color={C.success} />
+                            <Text style={styles.pdTreatText}>{pd.treatment}</Text>
+                          </View>
+                          <View style={styles.pdPreventBox}>
+                            <Ionicons name="shield-checkmark-outline" size={14} color={C.info} />
+                            <Text style={styles.pdPreventText}>{pd.prevention}</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {analysis.trichomeStatus && analysis.trichomeStatus.development !== "Not Visible" && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Trichome Status</Text>
+                      <View style={[styles.trichCard, { borderColor: (TRICHOME_COLORS[analysis.trichomeStatus.development] || C.tint) + "44" }]}>
+                        <LinearGradient colors={[(TRICHOME_COLORS[analysis.trichomeStatus.development] || C.tint) + "18", "transparent"]} style={styles.trichGrad}>
+                          <View style={styles.trichHeaderRow}>
+                            <View style={[styles.trichBadge, { backgroundColor: (TRICHOME_COLORS[analysis.trichomeStatus.development] || C.tint) + "33" }]}>
+                              <Ionicons name="sparkles" size={24} color={TRICHOME_COLORS[analysis.trichomeStatus.development] || C.tint} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.trichLabel}>Trichome Development</Text>
+                              <Text style={[styles.trichValue, { color: TRICHOME_COLORS[analysis.trichomeStatus.development] || C.tint }]}>{analysis.trichomeStatus.development}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.trichReadiness}>{analysis.trichomeStatus.readiness}</Text>
+                        </LinearGradient>
+                      </View>
+                    </View>
+                  )}
+
+                  {(analysis.waterStatus || analysis.lightStatus) && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Water & Light</Text>
+                      <View style={styles.statusRow}>
+                        {analysis.waterStatus && (
+                          <View style={[styles.statusCard, { borderColor: (STATUS_COLORS[analysis.waterStatus.status] || C.tint) + "44" }]}>
+                            <Ionicons name="water" size={22} color={STATUS_COLORS[analysis.waterStatus.status] || C.tint} />
+                            <Text style={styles.statusLabel}>Water</Text>
+                            <Text style={[styles.statusValue, { color: STATUS_COLORS[analysis.waterStatus.status] || C.tint }]}>{analysis.waterStatus.status}</Text>
+                            {analysis.waterStatus.indicators.length > 0 && (
+                              <View style={styles.statusIndicators}>
+                                {analysis.waterStatus.indicators.map((ind, i) => (
+                                  <Text key={i} style={styles.statusIndText}>{ind}</Text>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        )}
+                        {analysis.lightStatus && (
+                          <View style={[styles.statusCard, { borderColor: (STATUS_COLORS[analysis.lightStatus.status] || C.tint) + "44" }]}>
+                            <Ionicons name="sunny" size={22} color={STATUS_COLORS[analysis.lightStatus.status] || C.tint} />
+                            <Text style={styles.statusLabel}>Light</Text>
+                            <Text style={[styles.statusValue, { color: STATUS_COLORS[analysis.lightStatus.status] || C.tint }]}>{analysis.lightStatus.status}</Text>
+                            {analysis.lightStatus.indicators.length > 0 && (
+                              <View style={styles.statusIndicators}>
+                                {analysis.lightStatus.indicators.map((ind, i) => (
+                                  <Text key={i} style={styles.statusIndText}>{ind}</Text>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {analysis.rootHealth && analysis.rootHealth.status !== "Unknown" && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Root Health</Text>
+                      <View style={[styles.rootCard, { borderColor: (STATUS_COLORS[analysis.rootHealth.status] || C.tint) + "44" }]}>
+                        <View style={styles.rootHeaderRow}>
+                          <Ionicons name="git-branch-outline" size={22} color={STATUS_COLORS[analysis.rootHealth.status] || C.tint} />
+                          <Text style={[styles.rootStatusText, { color: STATUS_COLORS[analysis.rootHealth.status] || C.tint }]}>{analysis.rootHealth.status}</Text>
+                        </View>
+                        {analysis.rootHealth.indicators.length > 0 && (
+                          <View style={styles.indicatorList}>
+                            {analysis.rootHealth.indicators.map((ind, i) => (
+                              <View key={i} style={styles.indicatorItem}>
+                                <Ionicons name="ellipse" size={6} color={STATUS_COLORS[analysis.rootHealth!.status] || C.tint} />
+                                <Text style={styles.indicatorText}>{ind}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {analysis.trainingObserved && analysis.trainingObserved.length > 0 && analysis.trainingObserved[0] !== "None visible" && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Training Observed</Text>
+                      <View style={styles.trainingTagsBox}>
+                        {analysis.trainingObserved.map((t, i) => (
+                          <View key={i} style={styles.trainingTag}>
+                            <Ionicons name="fitness" size={13} color={C.tint} />
+                            <Text style={styles.trainingTagText}>{t}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
                   {analysis.environmentHints && (
                     <View style={styles.section}>
                       <Text style={styles.sectionTitle}>Environment Clues</Text>
@@ -401,6 +798,20 @@ export default function AnalyzeScreen() {
                       </View>
                     </View>
                   )}
+
+                  {analysis.overallDiagnosis && (
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>Overall Diagnosis</Text>
+                      <View style={styles.diagnosisCard}>
+                        <LinearGradient colors={["#1a2e1c", "#162318"]} style={styles.diagnosisGrad}>
+                          <Ionicons name="clipboard-outline" size={20} color={C.tint} />
+                          <Text style={styles.diagnosisText}>{analysis.overallDiagnosis}</Text>
+                        </LinearGradient>
+                      </View>
+                    </View>
+                  )}
+
+                  <TroubleshootingGuide analysis={analysis} />
 
                   {analysis.funFact && (
                     <View style={styles.funFactCard}>
@@ -657,4 +1068,88 @@ const styles = StyleSheet.create({
     borderColor: C.cardBorder,
   },
   newAnalysisBtnText: { fontFamily: "Nunito_600SemiBold", fontSize: 14, color: C.textSecondary },
+  sexCard: { borderRadius: 16, overflow: "hidden", borderWidth: 1 },
+  sexCardGrad: { padding: 16, gap: 12 },
+  sexHeaderRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  sexBadge: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  sexValue: { fontFamily: "Nunito_800ExtraBold", fontSize: 22 },
+  confidencePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" as const, marginTop: 4 },
+  confidenceText: { fontFamily: "Nunito_600SemiBold", fontSize: 11 },
+  indicatorList: { gap: 4 },
+  indicatorItem: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  indicatorText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, flex: 1, lineHeight: 18 },
+  nutrientDetailBox: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
+  pdCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    borderLeftWidth: 3,
+    gap: 8,
+  },
+  pdHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  pdName: { fontFamily: "Nunito_700Bold", fontSize: 15, color: C.text },
+  pdBadgeRow: { flexDirection: "row", gap: 6, marginTop: 4 },
+  pdTypeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  pdTypeText: { fontFamily: "Nunito_600SemiBold", fontSize: 11 },
+  pdSevBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  pdSevText: { fontFamily: "Nunito_600SemiBold", fontSize: 11 },
+  pdSymptoms: { gap: 3 },
+  pdTreatBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", backgroundColor: C.success + "11", borderRadius: 10, padding: 10 },
+  pdTreatText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.success, flex: 1, lineHeight: 18 },
+  pdPreventBox: { flexDirection: "row", gap: 8, alignItems: "flex-start", backgroundColor: C.info + "11", borderRadius: 10, padding: 10 },
+  pdPreventText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.info, flex: 1, lineHeight: 18 },
+  trichCard: { borderRadius: 16, overflow: "hidden", borderWidth: 1 },
+  trichGrad: { padding: 16, gap: 10 },
+  trichHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  trichBadge: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  trichLabel: { fontFamily: "Nunito_400Regular", fontSize: 12, color: C.textMuted },
+  trichValue: { fontFamily: "Nunito_800ExtraBold", fontSize: 20 },
+  trichReadiness: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19 },
+  statusRow: { flexDirection: "row", gap: 10 },
+  statusCard: {
+    flex: 1,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    gap: 6,
+    alignItems: "center" as const,
+  },
+  statusLabel: { fontFamily: "Nunito_400Regular", fontSize: 11, color: C.textMuted },
+  statusValue: { fontFamily: "Nunito_700Bold", fontSize: 14 },
+  statusIndicators: { gap: 2, width: "100%" as const },
+  statusIndText: { fontFamily: "Nunito_400Regular", fontSize: 11, color: C.textSecondary, textAlign: "center" as const, lineHeight: 16 },
+  rootCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  rootHeaderRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rootStatusText: { fontFamily: "Nunito_700Bold", fontSize: 16 },
+  trainingTagsBox: { flexDirection: "row", flexWrap: "wrap" as const, gap: 8 },
+  trainingTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.tint + "18",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.tint + "33",
+  },
+  trainingTagText: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.tint },
+  diagnosisCard: { borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: C.cardBorder },
+  diagnosisGrad: { padding: 16, gap: 10, flexDirection: "row" as const, alignItems: "flex-start" as const },
+  diagnosisText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textSecondary, flex: 1, lineHeight: 21 },
 });
