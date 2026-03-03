@@ -16,7 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import Colors from "@/constants/colors";
-import { apiRequest } from "@/lib/query-client";
+import { getApiUrl } from "@/lib/query-client";
 
 const C = Colors.dark;
 
@@ -91,6 +91,25 @@ const hbStyles = StyleSheet.create({
   score: { fontFamily: "Nunito_700Bold", fontSize: 14, minWidth: 50 },
 });
 
+async function getImageBase64(uri: string): Promise<string> {
+  if (Platform.OS === "web") {
+    const response = await globalThis.fetch(uri);
+    const blob = await response.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(",")[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  return FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
 export default function AnalyzeScreen() {
   const insets = useSafeAreaInsets();
   const [image, setImage] = useState<string | null>(null);
@@ -100,37 +119,49 @@ export default function AnalyzeScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Required", "Please allow photo library access to analyze your plants.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-      base64: false,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0].uri);
-      setAnalysis(null);
-      setError(null);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please allow photo library access to analyze your plants.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        base64: false,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setImage(result.assets[0].uri);
+        setAnalysis(null);
+        setError(null);
+      }
+    } catch (err) {
+      console.error("Pick image error:", err);
+      Alert.alert("Error", "Failed to open photo library.");
     }
   };
 
   const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Required", "Please allow camera access to photograph your plants.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
-      base64: false,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0].uri);
-      setAnalysis(null);
-      setError(null);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please allow camera access to photograph your plants.");
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.7,
+        base64: false,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setImage(result.assets[0].uri);
+        setAnalysis(null);
+        setError(null);
+      }
+    } catch (err) {
+      console.error("Take photo error:", err);
+      Alert.alert("Error", "Failed to open camera.");
     }
   };
 
@@ -140,32 +171,25 @@ export default function AnalyzeScreen() {
     setError(null);
 
     try {
-      let base64: string;
-      if (Platform.OS === "web") {
-        const response = await fetch(image);
-        const blob = await response.blob();
-        base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        const b64 = await FileSystem.readAsStringAsync(image, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        base64 = b64;
+      const base64 = await getImageBase64(image);
+      const url = new URL("/api/analyze-plant", getApiUrl());
+
+      const res = await globalThis.fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Server error: ${res.status}`);
       }
 
-      const response = await apiRequest("POST", "/api/analyze-plant", { imageBase64: base64 });
-      const data = await response.json();
+      const data = await res.json();
       setAnalysis(data);
-    } catch (err) {
-      setError("Failed to analyze plant. Please check your connection and try again.");
-      console.error(err);
+    } catch (err: any) {
+      console.error("Analysis error:", err);
+      setError(err?.message || "Failed to analyze plant. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -214,25 +238,25 @@ export default function AnalyzeScreen() {
               </View>
               <View style={styles.tipsBox}>
                 <Text style={styles.tipsBold}>Tips for best results:</Text>
-                <Text style={styles.tipsItem}>• Good lighting, natural light is best</Text>
-                <Text style={styles.tipsItem}>• Get close enough to see leaf detail</Text>
-                <Text style={styles.tipsItem}>• Show both top and underside if possible</Text>
-                <Text style={styles.tipsItem}>• Include problem areas in the frame</Text>
+                <Text style={styles.tipsItem}>Good lighting, natural light is best</Text>
+                <Text style={styles.tipsItem}>Get close enough to see leaf detail</Text>
+                <Text style={styles.tipsItem}>Show both top and underside if possible</Text>
+                <Text style={styles.tipsItem}>Include problem areas in the frame</Text>
               </View>
             </View>
           ) : (
             <>
               <View style={styles.imageContainer}>
                 <Image source={{ uri: image }} style={styles.plantImage} resizeMode="cover" />
-                <Pressable style={styles.changeBtn} onPress={() => { setImage(null); setAnalysis(null); }}>
+                <Pressable style={styles.changeBtn} onPress={() => { setImage(null); setAnalysis(null); setError(null); }}>
                   <Ionicons name="close-circle" size={28} color="#fff" />
                 </Pressable>
               </View>
 
               <View style={styles.actionRow}>
-                <Pressable style={[styles.actionBtn, styles.secondaryBtn]} onPress={takePhoto}>
-                  <Ionicons name="camera" size={18} color={C.textSecondary} />
-                  <Text style={styles.secondaryBtnText}>Retake</Text>
+                <Pressable style={[styles.actionBtn, styles.secondaryBtn]} onPress={pickImage}>
+                  <Ionicons name="image" size={18} color={C.textSecondary} />
+                  <Text style={styles.secondaryBtnText}>Change</Text>
                 </Pressable>
                 <Pressable style={[styles.actionBtn, styles.primaryBtn]} onPress={analyzeImage} disabled={loading}>
                   <LinearGradient colors={["#4caf50", "#2e7d32"]} style={styles.primaryBtnGrad}>
@@ -258,6 +282,9 @@ export default function AnalyzeScreen() {
                 <View style={styles.errorCard}>
                   <Ionicons name="alert-circle" size={24} color={C.danger} />
                   <Text style={styles.errorText}>{error}</Text>
+                  <Pressable style={styles.retryBtn} onPress={analyzeImage}>
+                    <Text style={styles.retryText}>Retry</Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -404,7 +431,7 @@ export default function AnalyzeScreen() {
 
                   <Pressable
                     style={styles.newAnalysisBtn}
-                    onPress={() => { setImage(null); setAnalysis(null); }}
+                    onPress={() => { setImage(null); setAnalysis(null); setError(null); }}
                   >
                     <Ionicons name="camera-outline" size={18} color={C.textSecondary} />
                     <Text style={styles.newAnalysisBtnText}>Analyze Another Plant</Text>
@@ -526,8 +553,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: C.danger + "44",
+    flexWrap: "wrap",
   },
   errorText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.danger, flex: 1 },
+  retryBtn: { backgroundColor: C.danger + "22", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, marginTop: 4 },
+  retryText: { fontFamily: "Nunito_600SemiBold", fontSize: 13, color: C.danger },
   analysisContainer: { gap: 16 },
   healthHeader: {
     borderRadius: 16,
@@ -580,8 +610,15 @@ const styles = StyleSheet.create({
   severityBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   severityText: { fontFamily: "Nunito_600SemiBold", fontSize: 11 },
   issueDesc: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19 },
-  fixBox: { flexDirection: "row", gap: 6, alignItems: "flex-start", backgroundColor: C.backgroundTertiary, borderRadius: 8, padding: 10 },
-  fixText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.text, flex: 1, lineHeight: 19 },
+  fixBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: C.backgroundTertiary,
+    borderRadius: 10,
+    padding: 10,
+  },
+  fixText: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.accent, flex: 1, lineHeight: 18 },
   nutrientBox: {
     backgroundColor: C.card,
     borderRadius: 14,
@@ -590,31 +627,47 @@ const styles = StyleSheet.create({
     borderColor: C.cardBorder,
     gap: 10,
   },
-  nutrientRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  nutrientRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   nutrientName: { fontFamily: "Nunito_600SemiBold", fontSize: 14, color: C.text },
-  nutrientPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  nutrientValue: { fontFamily: "Nunito_600SemiBold", fontSize: 12 },
-  nutrientSummary: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.cardBorder },
-  recBox: { gap: 10 },
-  recItem: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  recNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.tint, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  nutrientPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  nutrientValue: { fontFamily: "Nunito_700Bold", fontSize: 12 },
+  nutrientSummary: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19, marginTop: 2 },
+  recBox: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    gap: 12,
+  },
+  recItem: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  recNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.tint, alignItems: "center", justifyContent: "center" },
   recNumText: { fontFamily: "Nunito_700Bold", fontSize: 12, color: "#fff" },
-  recText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.text, flex: 1, lineHeight: 20 },
-  envHintBox: { flexDirection: "row", gap: 10, backgroundColor: C.backgroundTertiary, borderRadius: 12, padding: 14, alignItems: "flex-start" },
+  recText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textSecondary, flex: 1, lineHeight: 20 },
+  envHintBox: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
   envHintText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textSecondary, flex: 1, lineHeight: 20 },
   funFactCard: { borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: C.cardBorder },
-  funFactGrad: { padding: 16 },
-  funFactHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  funFactLabel: { fontFamily: "Nunito_700Bold", fontSize: 12, color: C.accent, letterSpacing: 0.5, textTransform: "uppercase" },
+  funFactGrad: { padding: 16, gap: 8 },
+  funFactHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  funFactLabel: { fontFamily: "Nunito_700Bold", fontSize: 12, color: C.accent, textTransform: "uppercase" as const, letterSpacing: 0.5 },
   funFactText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.text, lineHeight: 21 },
   newAnalysisBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    padding: 14,
+    backgroundColor: C.card,
     borderRadius: 14,
-    backgroundColor: C.backgroundTertiary,
+    padding: 14,
     borderWidth: 1,
     borderColor: C.cardBorder,
   },

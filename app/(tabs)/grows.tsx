@@ -20,6 +20,7 @@ import Colors from "@/constants/colors";
 import { useFocusEffect } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
+import { addXP, loadProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
 
 const C = Colors.dark;
 const STORAGE_KEY = "cannagrow_grows_v2";
@@ -97,11 +98,11 @@ function formatDate(isoDate: string): string {
 async function pickPhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: false });
+  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: false, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
   const uri = result.assets[0].uri;
   if (Platform.OS === "web") {
-    const res = await fetch(uri);
+    const res = await globalThis.fetch(uri);
     const blob = await res.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -116,11 +117,11 @@ async function pickPhoto(): Promise<string | null> {
 async function takePhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: false });
+  const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: false, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
   const uri = result.assets[0].uri;
   if (Platform.OS === "web") {
-    const res = await fetch(uri);
+    const res = await globalThis.fetch(uri);
     const blob = await res.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -435,7 +436,7 @@ function GrowDetailModal({
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const stageColor = STAGE_COLORS[currentGrow.stage] || C.tint;
 
-  const addNote = () => {
+  const addNote = async () => {
     if (!note.trim() && !selectedNoteImage) return;
     const newNote: GrowNote = {
       id: Date.now().toString(),
@@ -449,6 +450,8 @@ function GrowDetailModal({
     onUpdate(updated);
     setNote("");
     setSelectedNoteImage(null);
+    await addXP(10, "totalLogs");
+    if (selectedNoteImage) await addXP(5, "totalPhotos");
   };
 
   const addPhotoToNote = async (camera: boolean) => {
@@ -717,6 +720,7 @@ export default function GrowsScreen() {
   const addGrow = async (grow: Grow) => {
     await saveGrows([grow, ...grows]);
     setShowAdd(false);
+    await addXP(20, "totalGrows");
   };
 
   const updateGrow = async (updated: Grow) => {

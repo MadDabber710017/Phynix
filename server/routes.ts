@@ -12,7 +12,6 @@ const openai = new OpenAI({
 export async function registerRoutes(app: Express): Promise<Server> {
   const bodyParser = express.json({ limit: "20mb" });
 
-  // ---- AI Plant Analysis ----
   app.post("/api/analyze-plant", bodyParser, async (req: Request, res: Response) => {
     try {
       const { imageBase64 } = req.body;
@@ -68,18 +67,18 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
 
   // ---- Community Posts ----
 
-  // GET all posts (newest first)
   app.get("/api/community/posts", async (req: Request, res: Response) => {
     try {
-      const deviceId = req.query.deviceId as string || "";
-      const { rows } = await pool.query(`
-        SELECT cp.*,
+      const deviceId = (req.query.deviceId as string) || "";
+      const { rows } = await pool.query(
+        `SELECT cp.*,
           CASE WHEN pl.device_id IS NOT NULL THEN true ELSE false END as liked_by_me
         FROM community_posts cp
         LEFT JOIN post_likes pl ON cp.id = pl.post_id AND pl.device_id = $1
         ORDER BY cp.created_at DESC
-        LIMIT 50
-      `, [deviceId]);
+        LIMIT 50`,
+        [deviceId]
+      );
       res.json(rows);
     } catch (error) {
       console.error("Error fetching posts:", error);
@@ -87,18 +86,17 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
     }
   });
 
-  // POST create a new community post
   app.post("/api/community/posts", bodyParser, async (req: Request, res: Response) => {
     try {
-      const { growerName, strain, stage, title, description, imageBase64 } = req.body;
+      const { growerName, strain, stage, title, description, imageBase64, deviceId } = req.body;
       if (!growerName || !title || !description || !stage) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
       const { rows } = await pool.query(
-        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null]
+        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64, device_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null, deviceId || ""]
       );
       res.status(201).json({ ...rows[0], liked_by_me: false });
     } catch (error) {
@@ -107,14 +105,12 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
     }
   });
 
-  // POST toggle like on a post
   app.post("/api/community/posts/:id/like", bodyParser, async (req: Request, res: Response) => {
     try {
       const postId = parseInt(req.params.id);
       const { deviceId } = req.body;
       if (!deviceId) return res.status(400).json({ error: "deviceId required" });
 
-      // Check if already liked
       const existing = await pool.query(
         "SELECT id FROM post_likes WHERE post_id = $1 AND device_id = $2",
         [postId, deviceId]
@@ -122,12 +118,10 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
 
       let liked: boolean;
       if (existing.rows.length > 0) {
-        // Unlike
         await pool.query("DELETE FROM post_likes WHERE post_id = $1 AND device_id = $2", [postId, deviceId]);
         await pool.query("UPDATE community_posts SET likes = GREATEST(0, likes - 1) WHERE id = $1", [postId]);
         liked = false;
       } else {
-        // Like
         await pool.query("INSERT INTO post_likes (post_id, device_id) VALUES ($1, $2)", [postId, deviceId]);
         await pool.query("UPDATE community_posts SET likes = likes + 1 WHERE id = $1", [postId]);
         liked = true;
@@ -141,14 +135,97 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
     }
   });
 
-  // DELETE a post (only if posted from same device — optional honor system)
+  // ---- Comments ----
+
+  app.get("/api/community/posts/:id/comments", async (req: Request, res: Response) => {
+    try {
+      const postId = parseInt(req.params.id);
+      const { rows } = await pool.query(
+        "SELECT * FROM community_comments WHERE post_id = $1 ORDER BY created_at ASC",
+        [postId]
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/community/posts/:id/comments", bodyParser, async (req: Request, res: Response) => {
+    try {
+      const postId = parseInt(req.params.id);
+      const { deviceId, commenterName, content } = req.body;
+      if (!deviceId || !commenterName || !content) {
+        return res.status(400).json({ error: "Missing fields" });
+      }
+
+      const { rows } = await pool.query(
+        `INSERT INTO community_comments (post_id, device_id, commenter_name, content)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [postId, deviceId, commenterName.trim(), content.trim()]
+      );
+      await pool.query(
+        "UPDATE community_posts SET comments_count = COALESCE(comments_count, 0) + 1 WHERE id = $1",
+        [postId]
+      );
+      res.status(201).json(rows[0]);
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      res.status(500).json({ error: "Failed to add comment" });
+    }
+  });
+
+  // ---- Follows ----
+
+  app.get("/api/community/follows", async (req: Request, res: Response) => {
+    try {
+      const deviceId = (req.query.deviceId as string) || "";
+      const { rows } = await pool.query(
+        "SELECT following_name FROM community_follows WHERE follower_device_id = $1",
+        [deviceId]
+      );
+      res.json(rows.map((r: any) => r.following_name));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch follows" });
+    }
+  });
+
+  app.post("/api/community/follow", bodyParser, async (req: Request, res: Response) => {
+    try {
+      const { deviceId, growerName } = req.body;
+      if (!deviceId || !growerName) return res.status(400).json({ error: "Missing fields" });
+
+      const existing = await pool.query(
+        "SELECT id FROM community_follows WHERE follower_device_id = $1 AND following_name = $2",
+        [deviceId, growerName]
+      );
+
+      let following: boolean;
+      if (existing.rows.length > 0) {
+        await pool.query(
+          "DELETE FROM community_follows WHERE follower_device_id = $1 AND following_name = $2",
+          [deviceId, growerName]
+        );
+        following = false;
+      } else {
+        await pool.query(
+          "INSERT INTO community_follows (follower_device_id, following_name) VALUES ($1, $2)",
+          [deviceId, growerName]
+        );
+        following = true;
+      }
+      res.json({ following });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to toggle follow" });
+    }
+  });
+
   app.delete("/api/community/posts/:id", bodyParser, async (req: Request, res: Response) => {
     try {
       const postId = parseInt(req.params.id);
       await pool.query("DELETE FROM community_posts WHERE id = $1", [postId]);
       res.status(204).send();
     } catch (error) {
-      console.error("Error deleting post:", error);
       res.status(500).json({ error: "Failed to delete post" });
     }
   });
