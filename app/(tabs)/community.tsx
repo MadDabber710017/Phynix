@@ -27,22 +27,74 @@ import * as ImagePicker from "expo-image-picker";
 import { getApiUrl } from "@/lib/query-client";
 import { addXP } from "@/lib/gamification";
 
-const AVATAR_ICONS: Array<keyof typeof Ionicons.glyphMap> = [
-  "leaf", "flower", "rose", "nutrition", "water",
-  "sunny", "rainy", "flask", "bug", "earth",
-  "planet", "sparkles", "star", "diamond", "ribbon",
-  "heart", "flame", "flash", "cloudy", "moon",
-];
-
-async function getAvatarIcon(): Promise<string> {
-  return (await AsyncStorage.getItem("phynix_avatar_icon")) || "leaf";
-}
-
-async function setAvatarIcon(icon: string): Promise<void> {
-  await AsyncStorage.setItem("phynix_avatar_icon", icon);
-}
-
 const C = Colors.dark;
+const PROFILE_PIC_KEY = "phynix_profile_pic";
+
+async function getProfilePic(): Promise<string | null> {
+  return AsyncStorage.getItem(PROFILE_PIC_KEY);
+}
+
+async function setProfilePic(base64: string): Promise<void> {
+  await AsyncStorage.setItem(PROFILE_PIC_KEY, base64);
+}
+
+async function pickProfilePic(): Promise<string | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== "granted") {
+    Alert.alert("Permission Required", "Please allow photo library access to set your profile picture.");
+    return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    quality: 0.5,
+    base64: true,
+    mediaTypes: ["images"],
+    allowsEditing: true,
+    aspect: [1, 1],
+  });
+  if (result.canceled || !result.assets[0]) return null;
+  if (result.assets[0].base64) return result.assets[0].base64;
+  if (Platform.OS === "web") {
+    const res = await globalThis.fetch(result.assets[0].uri);
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  return null;
+}
+
+function ProfilePicView({ base64, name, size }: { base64?: string | null; name: string; size: number }) {
+  const borderW = size > 50 ? 3 : 2;
+  if (base64) {
+    return (
+      <Image
+        source={{ uri: `data:image/jpeg;base64,${base64}` }}
+        style={{
+          width: size, height: size, borderRadius: size / 2,
+          borderWidth: borderW, borderColor: C.tint + "55",
+        }}
+      />
+    );
+  }
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center",
+      borderWidth: borderW, borderColor: C.tint + "55",
+    }}>
+      <Text style={{
+        fontFamily: "Nunito_800ExtraBold",
+        fontSize: Math.round(size * 0.42),
+        color: C.tint,
+      }}>
+        {(name || "?").charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+}
 
 const STAGES = [
   "Seedling", "Early Vegetative", "Late Vegetative", "Pre-Flower",
@@ -220,9 +272,7 @@ function CommentsSheet({
             comments.map((c) => (
               <View key={c.id} style={cmStyles.commentCard}>
                 <View style={cmStyles.commentHeader}>
-                  <View style={cmStyles.commentAvatar}>
-                    <Text style={cmStyles.commentAvatarText}>{c.commenter_name.charAt(0).toUpperCase()}</Text>
-                  </View>
+                  <ProfilePicView name={c.commenter_name} size={30} />
                   <View style={{ flex: 1 }}>
                     <Text style={cmStyles.commentName}>{c.commenter_name}</Text>
                     <Text style={cmStyles.commentTime}>{timeAgo(c.created_at)}</Text>
@@ -287,8 +337,8 @@ function PostCard({
   return (
     <View style={cardStyles.card}>
       <View style={cardStyles.topRow}>
-        <Pressable style={cardStyles.avatarWrap} onPress={() => onProfile(post.grower_name)}>
-          <Ionicons name="leaf" size={20} color={C.tint} />
+        <Pressable onPress={() => onProfile(post.grower_name)}>
+          <ProfilePicView name={post.grower_name} size={42} />
         </Pressable>
         <Pressable style={{ flex: 1 }} onPress={() => onProfile(post.grower_name)}>
           <Text style={cardStyles.growerName}>{post.grower_name}</Text>
@@ -461,9 +511,7 @@ function NewPostModal({
           keyboardShouldPersistTaps="handled"
         >
           <View style={npStyles.nameRow}>
-            <View style={npStyles.avatar}>
-              <Text style={npStyles.avatarText}>{(growerName || "?").charAt(0).toUpperCase()}</Text>
-            </View>
+            <ProfilePicView name={growerName} size={42} />
             <TextInput
               style={npStyles.nameInput}
               value={growerName}
@@ -546,51 +594,6 @@ interface GrowerProfile {
   posts: Post[];
 }
 
-function AvatarPickerModal({
-  onClose,
-  currentIcon,
-  onSelect,
-}: {
-  onClose: () => void;
-  currentIcon: string;
-  onSelect: (icon: string) => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-
-  return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet">
-      <View style={[avatarStyles.container, { backgroundColor: C.background }]}>
-        <View style={[avatarStyles.header, { paddingTop: topPad + 8 }]}>
-          <Pressable onPress={onClose}>
-            <Ionicons name="close" size={24} color={C.textSecondary} />
-          </Pressable>
-          <Text style={avatarStyles.headerTitle}>Choose Avatar</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <View style={avatarStyles.grid}>
-          {AVATAR_ICONS.map((icon) => (
-            <Pressable
-              key={icon}
-              style={[
-                avatarStyles.iconBtn,
-                currentIcon === icon && avatarStyles.iconBtnActive,
-              ]}
-              onPress={() => { onSelect(icon); onClose(); }}
-            >
-              <Ionicons
-                name={icon as any}
-                size={28}
-                color={currentIcon === icon ? "#fff" : C.tint}
-              />
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 function GrowerProfileModal({
   growerName,
   onClose,
@@ -647,9 +650,7 @@ function GrowerProfileModal({
         ) : (
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
             <View style={profileStyles.profileCard}>
-              <View style={profileStyles.avatarLarge}>
-                <Ionicons name="leaf" size={36} color={C.tint} />
-              </View>
+              <ProfilePicView name={profile.growerName} size={72} />
               <Text style={profileStyles.name}>{profile.growerName}</Text>
               <View style={profileStyles.statsRow}>
                 <View style={profileStyles.statItem}>
@@ -728,7 +729,7 @@ export default function CommunityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showNewPost, setShowNewPost] = useState(false);
   const [myName, setMyName] = useState("");
-  const [myAvatarIcon, setMyAvatarIcon] = useState("leaf");
+  const [myProfilePic, setMyProfilePic] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"all" | "following">("all");
@@ -737,7 +738,6 @@ export default function CommunityScreen() {
   const [searchResults, setSearchResults] = useState<Post[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [profileName, setProfileName] = useState<string | null>(null);
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   const fetchPosts = useCallback(async (quiet = false) => {
@@ -745,9 +745,9 @@ export default function CommunityScreen() {
     setError("");
     try {
       const deviceId = await getDeviceId();
-      const [name, avatar] = await Promise.all([getGrowerName(), getAvatarIcon()]);
+      const [name, pic] = await Promise.all([getGrowerName(), getProfilePic()]);
       setMyName(name);
-      setMyAvatarIcon(avatar);
+      setMyProfilePic(pic);
 
       const [postsRes, followsRes] = await Promise.all([
         globalThis.fetch(new URL(`/api/community/posts?deviceId=${encodeURIComponent(deviceId)}`, getApiUrl()).toString()),
@@ -788,9 +788,12 @@ export default function CommunityScreen() {
     } catch {} finally { setSearchLoading(false); }
   }, []);
 
-  const handleAvatarSelect = async (icon: string) => {
-    setMyAvatarIcon(icon);
-    await setAvatarIcon(icon);
+  const handleProfilePic = async () => {
+    const base64 = await pickProfilePic();
+    if (base64) {
+      setMyProfilePic(base64);
+      await setProfilePic(base64);
+    }
   };
 
   const handleLike = async (postId: number) => {
@@ -857,8 +860,8 @@ export default function CommunityScreen() {
         <LinearGradient colors={["#0d2410", "#0a130b"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
           <View style={styles.headerRow}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-              <Pressable style={styles.myAvatarBtn} onPress={() => setShowAvatarPicker(true)}>
-                <Ionicons name={myAvatarIcon as any} size={20} color={C.tint} />
+              <Pressable onPress={handleProfilePic}>
+                <ProfilePicView base64={myProfilePic} name={myName} size={40} />
               </Pressable>
               <View>
                 <Text style={styles.headerTitle}>Community</Text>
@@ -982,13 +985,6 @@ export default function CommunityScreen() {
           onComments={setCommentPost}
         />
       )}
-      {showAvatarPicker && (
-        <AvatarPickerModal
-          onClose={() => setShowAvatarPicker(false)}
-          currentIcon={myAvatarIcon}
-          onSelect={handleAvatarSelect}
-        />
-      )}
     </View>
   );
 }
@@ -1021,7 +1017,6 @@ const styles = StyleSheet.create({
   shareNowBtn: { backgroundColor: C.tint, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 8 },
   shareNowText: { fontFamily: "Nunito_700Bold", fontSize: 15, color: "#fff" },
   feed: { padding: 16, gap: 16 },
-  myAvatarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.tint + "55" },
   searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.backgroundTertiary, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12, borderWidth: 1, borderColor: C.cardBorder },
   searchInput: { flex: 1, fontFamily: "Nunito_400Regular", fontSize: 14, color: C.text, paddingVertical: 2 },
 });
@@ -1029,8 +1024,6 @@ const styles = StyleSheet.create({
 const cardStyles = StyleSheet.create({
   card: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.cardBorder, overflow: "hidden" },
   topRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, paddingBottom: 8 },
-  avatarWrap: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.tint + "55" },
-  avatarText: { fontFamily: "Nunito_800ExtraBold", fontSize: 18, color: C.tint },
   growerName: { fontFamily: "Nunito_700Bold", fontSize: 14, color: C.text },
   timeAgo: { fontFamily: "Nunito_400Regular", fontSize: 11, color: C.textMuted, marginTop: 1 },
   followBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.backgroundTertiary },
@@ -1061,8 +1054,6 @@ const cmStyles = StyleSheet.create({
   emptyText: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textMuted },
   commentCard: { backgroundColor: C.backgroundTertiary, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.cardBorder, gap: 6 },
   commentHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
-  commentAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center" },
-  commentAvatarText: { fontFamily: "Nunito_700Bold", fontSize: 13, color: C.tint },
   commentName: { fontFamily: "Nunito_700Bold", fontSize: 13, color: C.text },
   commentTime: { fontFamily: "Nunito_400Regular", fontSize: 11, color: C.textMuted },
   commentContent: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textSecondary, lineHeight: 20, paddingLeft: 40 },
@@ -1080,8 +1071,6 @@ const npStyles = StyleSheet.create({
   postHeaderBtnText: { fontFamily: "Nunito_700Bold", fontSize: 14, color: "#fff" },
   content: { padding: 16, gap: 14 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.tint + "55" },
-  avatarText: { fontFamily: "Nunito_800ExtraBold", fontSize: 18, color: C.tint },
   nameInput: { flex: 1, fontFamily: "Nunito_600SemiBold", fontSize: 15, color: C.text, borderBottomWidth: 1, borderBottomColor: C.cardBorder, paddingVertical: 8 },
   titleInput: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text, paddingVertical: 8 },
   descInput: { fontFamily: "Nunito_400Regular", fontSize: 15, color: C.text, minHeight: 80, textAlignVertical: "top" as const },
@@ -1106,7 +1095,6 @@ const profileStyles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
   headerTitle: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text },
   profileCard: { alignItems: "center", paddingVertical: 28, gap: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
-  avatarLarge: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.tint + "33", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: C.tint + "55" },
   name: { fontFamily: "Nunito_800ExtraBold", fontSize: 22, color: C.text },
   statsRow: { flexDirection: "row", gap: 32, marginTop: 4 },
   statItem: { alignItems: "center" },
@@ -1121,11 +1109,3 @@ const profileStyles = StyleSheet.create({
   miniDesc: { fontFamily: "Nunito_400Regular", fontSize: 13, color: C.textSecondary, lineHeight: 19, marginTop: 6 },
 });
 
-const avatarStyles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder },
-  headerTitle: { fontFamily: "Nunito_700Bold", fontSize: 18, color: C.text },
-  grid: { flexDirection: "row", flexWrap: "wrap", padding: 16, gap: 12, justifyContent: "center" },
-  iconBtn: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.backgroundTertiary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: C.cardBorder },
-  iconBtnActive: { backgroundColor: C.tint, borderColor: C.tint },
-});
