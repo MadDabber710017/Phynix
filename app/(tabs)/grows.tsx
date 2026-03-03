@@ -23,7 +23,7 @@ import * as FileSystem from "expo-file-system";
 import { addXP, loadProfile, type GrowProfile, LEVEL_THRESHOLDS, getNextLevel, ALL_ACHIEVEMENTS } from "@/lib/gamification";
 
 const C = Colors.dark;
-const STORAGE_KEY = "cannagrow_grows_v2";
+const STORAGE_KEY = "phynix_grows_v2";
 
 interface GrowNote {
   id: string;

@@ -63,16 +63,16 @@ interface Post {
 }
 
 async function getDeviceId(): Promise<string> {
-  let id = await AsyncStorage.getItem("cannagrow_device_id");
+  let id = await AsyncStorage.getItem("phynix_device_id");
   if (!id) {
     id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-    await AsyncStorage.setItem("cannagrow_device_id", id);
+    await AsyncStorage.setItem("phynix_device_id", id);
   }
   return id;
 }
 
 async function getGrowerName(): Promise<string> {
-  return (await AsyncStorage.getItem("cannagrow_grower_name")) || "";
+  return (await AsyncStorage.getItem("phynix_grower_name")) || "";
 }
 
 function timeAgo(isoDate: string): string {
@@ -260,7 +260,7 @@ function PostCard({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${post.title}\n\nBy ${post.grower_name} | ${post.strain} | ${post.stage}\n\n${post.description}\n\nShared from CannaGrow`,
+        message: `${post.title}\n\nBy ${post.grower_name} | ${post.strain} | ${post.stage}\n\n${post.description}\n\nShared from Phynix`,
       });
     } catch {}
   };
@@ -392,7 +392,7 @@ function NewPostModal({
 
     setPosting(true);
     try {
-      await AsyncStorage.setItem("cannagrow_grower_name", growerName.trim());
+      await AsyncStorage.setItem("phynix_grower_name", growerName.trim());
       const deviceId = await getDeviceId();
       const url = new URL("/api/community/posts", getApiUrl());
       const res = await globalThis.fetch(url.toString(), {

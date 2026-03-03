@@ -7,12 +7,15 @@ import {
   Pressable,
   Platform,
   Modal,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
+
+const PhynixLogo = require("@/assets/images/phynix-logo.png");
 import {
   loadProfile,
   trackDailyActivity,
@@ -149,10 +152,10 @@ export default function HomeScreen() {
           <View style={styles.headerContent}>
             <View>
               <Text style={styles.greeting}>{getGreeting()}, Grower</Text>
-              <Text style={styles.appName}>CannaGrow</Text>
+              <Text style={styles.appName}>Phynix</Text>
             </View>
             <View style={styles.headerIcon}>
-              <Ionicons name="leaf" size={32} color={C.tint} />
+              <Image source={PhynixLogo} style={styles.logoImage} resizeMode="contain" />
             </View>
           </View>
         </LinearGradient>
@@ -300,7 +303,9 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: C.backgroundTertiary,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.cardBorder,
+    overflow: "hidden" as const,
   },
+  logoImage: { width: 48, height: 48 },
   content: { padding: 16, gap: 16 },
   levelCard: {
     borderRadius: 18, padding: 16, gap: 14,

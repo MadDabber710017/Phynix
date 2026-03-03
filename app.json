@@ -41,8 +41,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "CannaGrow needs access to your photos to analyze your plants.",
-          "cameraPermission": "CannaGrow needs camera access to analyze your plants."
+          "photosPermission": "Phynix needs access to your photos to analyze your plants.",
+          "cameraPermission": "Phynix needs camera access to analyze your plants."
         }
       ]
     ],

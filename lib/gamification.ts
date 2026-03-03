@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const GAMIFICATION_KEY = "cannagrow_gamification_v1";
+const GAMIFICATION_KEY = "phynix_gamification_v1";
 
 export interface Achievement {
   id: string;
@@ -158,7 +158,7 @@ export async function addXP(amount: number, statKey?: keyof GrowProfile["stats"]
 }
 
 export async function trackDailyActivity(): Promise<void> {
-  const LAST_ACTIVE_KEY = "cannagrow_last_active";
+  const LAST_ACTIVE_KEY = "phynix_last_active";
   const today = new Date().toDateString();
   const lastActive = await AsyncStorage.getItem(LAST_ACTIVE_KEY);
   if (lastActive !== today) {
