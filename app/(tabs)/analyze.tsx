@@ -110,9 +110,9 @@ export default function AnalyzeScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.7,
+        quality: 0.3,
         base64: true,
-        allowsEditing: false,
+        allowsEditing: true,
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         setImage(result.assets[0].uri);
@@ -134,9 +134,9 @@ export default function AnalyzeScreen() {
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
-        quality: 0.7,
+        quality: 0.3,
         base64: true,
-        allowsEditing: false,
+        allowsEditing: true,
       });
       if (!result.canceled && result.assets && result.assets[0]) {
         setImage(result.assets[0].uri);

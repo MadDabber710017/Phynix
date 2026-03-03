@@ -16,9 +16,9 @@ A comprehensive cannabis growing mobile app built with Expo React Native. Covers
 ### 5 Tabs:
 1. **Home** — Daily grow tips, quick reference stats, growth cycle overview, environment targets, gamification level/XP/achievements (78 achievements, 30 levels)
 2. **Guides** — Complete grow guides + encyclopedia (segment toggle: Guides / Encyclopedia)
-3. **My Grows** — Track unlimited grows with stages, notes/log, equipment wizard, photo uploads, light schedules, virtual plant companion
-4. **Analyze** — AI plant analyzer: take/upload photo -> AI identifies stage, health score, issues, nutrients, recommendations (uses base64 from picker, not FileSystem)
-5. **Community** — Social feed (likes, comments, follows, shares), grower profiles, avatar icons, user search, Everyone/Following filter
+3. **My Grows** — Track unlimited grows with stages, notes/log, equipment wizard, multi-photo uploads, light schedules, virtual plant companion, quick action buttons (water/nutrients/transplant/node/bud)
+4. **Analyze** — AI plant analyzer: take/upload photo -> AI identifies stage, health score, issues, nutrients, recommendations (uses base64 from picker at quality 0.3)
+5. **Community** — Social feed (likes, comments, follows, shares, reposts), grower profiles, profile pictures (real photos), user search, Everyone/Following filter
 
 ## Gamification
 - 30 levels (Sprout -> Phynix Immortal) up to 100,000 XP
@@ -29,21 +29,31 @@ A comprehensive cannabis growing mobile app built with Expo React Native. Covers
 
 ## Virtual Plant System
 - Each grow has an interactive virtual plant (`components/VirtualPlant.tsx`)
-- Plant appearance driven by real grow data: stage determines shape, log entries affect fullness, recent care affects health color, photos add sparkle effects
-- 6 visual stages: Seed, Sprout, Seedling, Vegetative, Flowering, Harvest Ready
+- Realistic cannabis plant visualization with 10 distinct stages: Germination (cracking seed), Seedling (cotyledons), Early Veg (3-finger leaves), Late Veg (5-7 finger fan leaves + branches), Pre-Flower (pistil hairs), Early/Mid/Late Flower (bud clusters + trichomes), Harvest Ready, Harvested (hanging to dry)
+- Cannabis fan leaves built from multiple pointed leaflets radiating from center
+- Bud clusters with pistil hairs and trichome dots
+- Grow action effects: watering darkens soil, nutrients darken leaves, transplant enlarges pot, node/bud counts control visible nodes and bud sites
 - Health indicator (Thriving/Healthy/Needs Care/Wilting) based on care frequency
 - Built from styled React Native Views with react-native-reanimated animations
 
+## Grow Action Tracking
+- Quick action buttons in grow log: Water, Nutrients, Transplant, Node, Bud
+- Each action auto-logs a tagged entry and increments the corresponding counter
+- Counters: waterings, nutrientFeedings, transplants, nodeCount, budCount
+- All counters feed into VirtualPlant for realistic visual updates
+- Multi-photo selection: can attach multiple photos per log entry
+
 ## Community Features
-- Avatar icon selection (20 preset plant-themed icons)
+- Profile picture support (real photos from library, stored as base64)
 - Grower profile modal (tap name to view: posts, join date, follow)
 - Search growers functionality
-- Comments, likes, follows, shares
+- Comments, likes, follows, native shares
+- Repost/share-to-feed: share another grower's post to your feed with attribution ("Shared from @name")
 
 ## API Endpoints
 - `POST /api/analyze-plant` — Accepts base64 image, returns full AI plant analysis JSON
 - `GET /api/community/posts` — Get community posts
-- `POST /api/community/posts` — Create community post
+- `POST /api/community/posts` — Create community post (supports shared_from, original_post_id for reposts)
 - `POST /api/community/posts/:id/like` — Toggle like
 - `DELETE /api/community/posts/:id` — Delete own post
 - `GET /api/community/posts/:id/comments` — Get comments
@@ -67,14 +77,14 @@ app/
     _layout.tsx        # NativeTabs (iOS 26) + Classic Tabs fallback
     index.tsx          # Home dashboard + gamification
     guides.tsx         # Growing guides + encyclopedia (segment toggle)
-    grows.tsx          # My Grows tracker + virtual plant (AsyncStorage)
-    analyze.tsx        # AI plant analyzer
-    community.tsx      # Social community feed + profiles + search
+    grows.tsx          # My Grows tracker + virtual plant + quick actions + multi-photo
+    analyze.tsx        # AI plant analyzer (quality 0.3)
+    community.tsx      # Social community feed + profiles + search + repost
 components/
-  VirtualPlant.tsx     # Interactive virtual plant component
+  VirtualPlant.tsx     # Realistic cannabis virtual plant (10 stages, grow action-driven)
 server/
-  index.ts             # Express server setup
-  routes.ts            # API endpoints (analyze, community, profiles, search)
+  index.ts             # Express server setup (50mb body limit)
+  routes.ts            # API endpoints (50mb bodyParser, analyze, community, profiles, search, repost)
   db.ts                # PostgreSQL connection pool
 lib/
   gamification.ts      # XP, 30 levels, 78 achievements system
@@ -90,9 +100,13 @@ constants/
 - `DATABASE_URL` — PostgreSQL connection string
 
 ## Storage Keys (AsyncStorage)
-- `phynix_grows_v2` — Grow data
+- `phynix_grows_v2` — Grow data (includes waterings, nutrientFeedings, transplants, nodeCount, budCount, multi-photo notes)
 - `phynix_gamification_v1` — XP/level/achievements profile
 - `phynix_device_id` — Anonymous device identifier
 - `phynix_grower_name` — User's grower name for community
-- `phynix_avatar_icon` — Selected avatar icon name
+- `phynix_profile_pic` — Profile picture base64 (replaces old phynix_avatar_icon)
 - `phynix_last_active` — Daily activity tracking
+
+## Server Limits
+- Body parser limit: 50mb (for base64 image uploads)
+- Image quality: 0.3 for analyzer/community posts, 0.5 for profile pics

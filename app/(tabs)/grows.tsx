@@ -32,6 +32,14 @@ interface GrowNote {
   dateTime: string;
   content: string;
   imageBase64?: string;
+  images?: string[];
+  tag?: string;
+}
+
+function getNoteImages(note: GrowNote): string[] {
+  if (note.images && note.images.length > 0) return note.images;
+  if (note.imageBase64) return [note.imageBase64];
+  return [];
 }
 
 interface Equipment {
@@ -57,6 +65,11 @@ interface Grow {
   equipment: Equipment;
   notes: GrowNote[];
   createdAt: string;
+  waterings?: number;
+  nutrientFeedings?: number;
+  transplants?: number;
+  nodeCount?: number;
+  budCount?: number;
 }
 
 const STAGES = [
@@ -96,13 +109,7 @@ function formatDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-async function pickPhoto(): Promise<string | null> {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== "granted") return null;
-  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.5, base64: true, mediaTypes: ["images"] });
-  if (result.canceled || !result.assets[0]) return null;
-  if (result.assets[0].base64) return result.assets[0].base64;
-  const uri = result.assets[0].uri;
+async function webUriToBase64(uri: string): Promise<string | null> {
   if (Platform.OS === "web") {
     const res = await globalThis.fetch(uri);
     const blob = await res.blob();
@@ -116,24 +123,31 @@ async function pickPhoto(): Promise<string | null> {
   return null;
 }
 
-async function takePhoto(): Promise<string | null> {
-  const { status } = await ImagePicker.requestCameraPermissionsAsync();
-  if (status !== "granted") return null;
-  const result = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true, mediaTypes: ["images"] });
-  if (result.canceled || !result.assets[0]) return null;
-  if (result.assets[0].base64) return result.assets[0].base64;
-  const uri = result.assets[0].uri;
-  if (Platform.OS === "web") {
-    const res = await globalThis.fetch(uri);
-    const blob = await res.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+async function pickPhoto(): Promise<string[]> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== "granted") return [];
+  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.3, base64: true, mediaTypes: ["images"], allowsMultipleSelection: true });
+  if (result.canceled || !result.assets || result.assets.length === 0) return [];
+  const images: string[] = [];
+  for (const asset of result.assets) {
+    if (asset.base64) {
+      images.push(asset.base64);
+    } else {
+      const b64 = await webUriToBase64(asset.uri);
+      if (b64) images.push(b64);
+    }
   }
-  return null;
+  return images;
+}
+
+async function takePhoto(): Promise<string[]> {
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  if (status !== "granted") return [];
+  const result = await ImagePicker.launchCameraAsync({ quality: 0.3, base64: true, mediaTypes: ["images"] });
+  if (result.canceled || !result.assets[0]) return [];
+  if (result.assets[0].base64) return [result.assets[0].base64];
+  const b64 = await webUriToBase64(result.assets[0].uri);
+  return b64 ? [b64] : [];
 }
 
 function AddGrowModal({ onClose, onSave }: { onClose: () => void; onSave: (g: Grow) => void }) {
@@ -434,37 +448,57 @@ function GrowDetailModal({
   const [currentGrow, setCurrentGrow] = useState(grow);
   const [activeTab, setActiveTab] = useState<"log" | "equipment" | "info">("log");
   const [addingPhoto, setAddingPhoto] = useState(false);
-  const [selectedNoteImage, setSelectedNoteImage] = useState<string | null>(null);
+  const [selectedNoteImages, setSelectedNoteImages] = useState<string[]>([]);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const stageColor = STAGE_COLORS[currentGrow.stage] || C.tint;
 
-  const addNote = async () => {
-    if (!note.trim() && !selectedNoteImage) return;
+  const addNote = async (content?: string, tag?: string) => {
+    const noteText = content ?? note.trim();
+    if (!noteText && selectedNoteImages.length === 0) return;
     const newNote: GrowNote = {
       id: Date.now().toString(),
       date: new Date().toLocaleDateString(),
       dateTime: new Date().toISOString(),
-      content: note.trim(),
-      imageBase64: selectedNoteImage || undefined,
+      content: noteText,
+      images: selectedNoteImages.length > 0 ? selectedNoteImages : undefined,
+      tag: tag || undefined,
     };
     const updated = { ...currentGrow, notes: [newNote, ...currentGrow.notes] };
     setCurrentGrow(updated);
     onUpdate(updated);
-    setNote("");
-    setSelectedNoteImage(null);
+    if (!content) setNote("");
+    setSelectedNoteImages([]);
     await addXP(10, "totalLogs");
-    if (selectedNoteImage) await addXP(5, "totalPhotos");
+    if (selectedNoteImages.length > 0) await addXP(5, "totalPhotos");
   };
 
   const addPhotoToNote = async (camera: boolean) => {
     setAddingPhoto(true);
     try {
-      const base64 = camera ? await takePhoto() : await pickPhoto();
-      if (base64) setSelectedNoteImage(base64);
+      const photos = camera ? await takePhoto() : await pickPhoto();
+      if (photos.length > 0) setSelectedNoteImages(prev => [...prev, ...photos]);
     } finally {
       setAddingPhoto(false);
     }
+  };
+
+  const quickAction = async (actionLabel: string, actionTag: string, field: "waterings" | "nutrientFeedings" | "transplants" | "nodeCount" | "budCount") => {
+    const newNote: GrowNote = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString(),
+      dateTime: new Date().toISOString(),
+      content: actionLabel,
+      tag: actionTag,
+    };
+    const updated = {
+      ...currentGrow,
+      notes: [newNote, ...currentGrow.notes],
+      [field]: (currentGrow[field] || 0) + 1,
+    };
+    setCurrentGrow(updated);
+    onUpdate(updated);
+    await addXP(10, "totalLogs");
   };
 
   const updateStage = (newStage: string) => {
@@ -535,10 +569,15 @@ function GrowDetailModal({
           <VirtualPlant
             stage={currentGrow.stage}
             noteCount={currentGrow.notes.length}
-            photoCount={currentGrow.notes.filter(n => !!n.imageBase64).length}
+            photoCount={currentGrow.notes.filter(n => getNoteImages(n).length > 0).length}
             daysSinceLastLog={currentGrow.notes.length > 0 ? Math.floor((Date.now() - new Date(currentGrow.notes[0].dateTime).getTime()) / (1000 * 60 * 60 * 24)) : days}
             recentLogCount={currentGrow.notes.filter(n => (Date.now() - new Date(n.dateTime).getTime()) < 7 * 24 * 60 * 60 * 1000).length}
             daysRunning={days}
+            waterings={currentGrow.waterings || 0}
+            nutrientFeedings={currentGrow.nutrientFeedings || 0}
+            transplants={currentGrow.transplants || 0}
+            nodeCount={currentGrow.nodeCount || 0}
+            budCount={currentGrow.budCount || 0}
           />
 
           {activeTab === "log" && (
@@ -569,14 +608,42 @@ function GrowDetailModal({
                 ))}
               </ScrollView>
 
+              <Text style={detStyles.sectionTitle}>Quick Actions</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                <Pressable style={[detStyles.quickActionBtn, { borderColor: "#42a5f5" }]} onPress={() => quickAction("Watered plants", "water", "waterings")}>
+                  <Ionicons name="water-outline" size={14} color="#42a5f5" />
+                  <Text style={[detStyles.quickActionText, { color: "#42a5f5" }]}>Water</Text>
+                </Pressable>
+                <Pressable style={[detStyles.quickActionBtn, { borderColor: "#66bb6a" }]} onPress={() => quickAction("Fed nutrients", "nutrient", "nutrientFeedings")}>
+                  <Ionicons name="flask-outline" size={14} color="#66bb6a" />
+                  <Text style={[detStyles.quickActionText, { color: "#66bb6a" }]}>Nutrients</Text>
+                </Pressable>
+                <Pressable style={[detStyles.quickActionBtn, { borderColor: "#ffa726" }]} onPress={() => quickAction("Transplanted to larger container", "transplant", "transplants")}>
+                  <Ionicons name="resize-outline" size={14} color="#ffa726" />
+                  <Text style={[detStyles.quickActionText, { color: "#ffa726" }]}>Transplant</Text>
+                </Pressable>
+                <Pressable style={[detStyles.quickActionBtn, { borderColor: "#26a69a" }]} onPress={() => quickAction("New node spotted", "node", "nodeCount")}>
+                  <Ionicons name="git-branch-outline" size={14} color="#26a69a" />
+                  <Text style={[detStyles.quickActionText, { color: "#26a69a" }]}>Node</Text>
+                </Pressable>
+                <Pressable style={[detStyles.quickActionBtn, { borderColor: "#ab47bc" }]} onPress={() => quickAction("New bud site forming", "bud", "budCount")}>
+                  <Ionicons name="flower-outline" size={14} color="#ab47bc" />
+                  <Text style={[detStyles.quickActionText, { color: "#ab47bc" }]}>Bud</Text>
+                </Pressable>
+              </ScrollView>
+
               <Text style={detStyles.sectionTitle}>Add Log Entry</Text>
-              {selectedNoteImage && (
-                <View style={detStyles.notePreviewImg}>
-                  <Image source={{ uri: `data:image/jpeg;base64,${selectedNoteImage}` }} style={detStyles.notePreviewImage} />
-                  <Pressable style={detStyles.removePreviewBtn} onPress={() => setSelectedNoteImage(null)}>
-                    <Ionicons name="close-circle" size={22} color="#fff" />
-                  </Pressable>
-                </View>
+              {selectedNoteImages.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                  {selectedNoteImages.map((img, idx) => (
+                    <View key={idx} style={[detStyles.notePreviewImg, { width: 100, marginRight: 8 }]}>
+                      <Image source={{ uri: `data:image/jpeg;base64,${img}` }} style={{ width: 100, height: 100, borderRadius: 10 }} />
+                      <Pressable style={detStyles.removePreviewBtn} onPress={() => setSelectedNoteImages(prev => prev.filter((_, i) => i !== idx))}>
+                        <Ionicons name="close-circle" size={22} color="#fff" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </ScrollView>
               )}
               <View style={detStyles.noteInput}>
                 <TextInput
@@ -595,7 +662,7 @@ function GrowDetailModal({
                   <Pressable style={detStyles.noteIconBtn} onPress={() => addPhotoToNote(true)} disabled={addingPhoto}>
                     <Ionicons name="camera-outline" size={20} color={C.tint} />
                   </Pressable>
-                  <Pressable style={detStyles.sendBtn} onPress={addNote}>
+                  <Pressable style={detStyles.sendBtn} onPress={() => addNote()}>
                     <Ionicons name="send" size={16} color="#fff" />
                   </Pressable>
                 </View>
@@ -608,27 +675,51 @@ function GrowDetailModal({
                   <Text style={detStyles.emptyLogText}>No entries yet. Start logging your grow!</Text>
                 </View>
               ) : (
-                currentGrow.notes.map((n) => (
-                  <View key={n.id} style={detStyles.noteCard}>
-                    <View style={detStyles.noteMeta}>
-                      <Ionicons name="time-outline" size={12} color={C.textMuted} />
-                      <Text style={detStyles.noteDate}>{n.date}</Text>
+                currentGrow.notes.map((n) => {
+                  const imgs = getNoteImages(n);
+                  return (
+                    <View key={n.id} style={detStyles.noteCard}>
+                      <View style={detStyles.noteMeta}>
+                        <Ionicons name="time-outline" size={12} color={C.textMuted} />
+                        <Text style={detStyles.noteDate}>{n.date}</Text>
+                        {n.tag && (
+                          <View style={[detStyles.tagBadge, { backgroundColor: n.tag === "water" ? "#42a5f522" : n.tag === "nutrient" ? "#66bb6a22" : n.tag === "transplant" ? "#ffa72622" : n.tag === "node" ? "#26a69a22" : n.tag === "bud" ? "#ab47bc22" : C.backgroundTertiary }]}>
+                            <Text style={[detStyles.tagText, { color: n.tag === "water" ? "#42a5f5" : n.tag === "nutrient" ? "#66bb6a" : n.tag === "transplant" ? "#ffa726" : n.tag === "node" ? "#26a69a" : n.tag === "bud" ? "#ab47bc" : C.textMuted }]}>{n.tag}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {n.content ? <Text style={detStyles.noteContent}>{n.content}</Text> : null}
+                      {imgs.length === 1 && (
+                        <Pressable onPress={() => setViewingImage(imgs[0])}>
+                          <Image
+                            source={{ uri: `data:image/jpeg;base64,${imgs[0]}` }}
+                            style={detStyles.noteImage}
+                            resizeMode="cover"
+                          />
+                          <View style={detStyles.imageTap}>
+                            <Ionicons name="expand-outline" size={16} color="#fff" />
+                          </View>
+                        </Pressable>
+                      )}
+                      {imgs.length > 1 && (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                          {imgs.map((img, idx) => (
+                            <Pressable key={idx} onPress={() => setViewingImage(img)} style={{ marginRight: 8 }}>
+                              <Image
+                                source={{ uri: `data:image/jpeg;base64,${img}` }}
+                                style={{ width: 140, height: 140, borderRadius: 10 }}
+                                resizeMode="cover"
+                              />
+                              <View style={detStyles.imageTap}>
+                                <Ionicons name="expand-outline" size={16} color="#fff" />
+                              </View>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      )}
                     </View>
-                    {n.content ? <Text style={detStyles.noteContent}>{n.content}</Text> : null}
-                    {n.imageBase64 && (
-                      <Pressable onPress={() => setViewingImage(n.imageBase64!)}>
-                        <Image
-                          source={{ uri: `data:image/jpeg;base64,${n.imageBase64}` }}
-                          style={detStyles.noteImage}
-                          resizeMode="cover"
-                        />
-                        <View style={detStyles.imageTap}>
-                          <Ionicons name="expand-outline" size={16} color="#fff" />
-                        </View>
-                      </Pressable>
-                    )}
-                  </View>
-                ))
+                  );
+                })
               )}
             </>
           )}
@@ -787,7 +878,13 @@ export default function GrowsScreen() {
             grows.map((grow) => {
               const stageColor = STAGE_COLORS[grow.stage] || C.tint;
               const days = getDaysRunning(grow.startDate);
-              const latestPhoto = grow.notes.find(n => n.imageBase64)?.imageBase64;
+              const latestPhoto = (() => {
+                for (const n of grow.notes) {
+                  const imgs = getNoteImages(n);
+                  if (imgs.length > 0) return imgs[0];
+                }
+                return undefined;
+              })();
               return (
                 <Pressable
                   key={grow.id}
@@ -957,6 +1054,10 @@ const detStyles = StyleSheet.create({
   equipIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.backgroundTertiary, alignItems: "center", justifyContent: "center" },
   equipLabel: { fontFamily: "Nunito_600SemiBold", fontSize: 12, color: C.textMuted, marginBottom: 2 },
   equipValue: { fontFamily: "Nunito_700Bold", fontSize: 14, color: C.text },
+  quickActionBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, marginRight: 8, backgroundColor: C.card },
+  quickActionText: { fontFamily: "Nunito_600SemiBold", fontSize: 12 },
+  tagBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 6 },
+  tagText: { fontFamily: "Nunito_600SemiBold", fontSize: 10, textTransform: "capitalize" as const },
   imageViewer: { flex: 1, backgroundColor: "rgba(0,0,0,0.95)", alignItems: "center", justifyContent: "center" },
   fullImage: { width: "100%", height: "80%" },
   closeImageBtn: { position: "absolute", top: 60, right: 20 },

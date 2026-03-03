@@ -10,7 +10,14 @@ const openai = new OpenAI({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  const bodyParser = express.json({ limit: "20mb" });
+  const bodyParser = express.json({ limit: "50mb" });
+
+  try {
+    await pool.query(`ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS shared_from TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS original_post_id INTEGER DEFAULT NULL`);
+  } catch (e) {
+    console.log("ALTER TABLE for repost columns (may already exist):", e);
+  }
 
   app.post("/api/analyze-plant", bodyParser, async (req: Request, res: Response) => {
     try {
@@ -88,15 +95,15 @@ If not a cannabis plant, set overallHealth to "Unknown", healthScore to 0.`,
 
   app.post("/api/community/posts", bodyParser, async (req: Request, res: Response) => {
     try {
-      const { growerName, strain, stage, title, description, imageBase64, deviceId } = req.body;
+      const { growerName, strain, stage, title, description, imageBase64, deviceId, shared_from, original_post_id } = req.body;
       if (!growerName || !title || !description || !stage) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
       const { rows } = await pool.query(
-        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64, device_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null, deviceId || ""]
+        `INSERT INTO community_posts (grower_name, strain, stage, title, description, image_base64, device_id, shared_from, original_post_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [growerName.trim(), strain?.trim() || "Unknown", stage, title.trim(), description.trim(), imageBase64 || null, deviceId || "", shared_from || null, original_post_id || null]
       );
       res.status(201).json({ ...rows[0], liked_by_me: false });
     } catch (error) {

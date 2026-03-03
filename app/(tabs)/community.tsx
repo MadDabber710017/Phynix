@@ -127,6 +127,8 @@ interface Post {
   created_at: string;
   liked_by_me: boolean;
   device_id: string;
+  shared_from?: string;
+  original_post_id?: number;
 }
 
 async function getDeviceId(): Promise<string> {
@@ -159,7 +161,7 @@ function timeAgo(isoDate: string): string {
 async function pickPhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.4, base64: true, mediaTypes: ["images"] });
+  const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.3, base64: true, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
   if (result.assets[0].base64) return result.assets[0].base64;
   const uri = result.assets[0].uri;
@@ -179,7 +181,7 @@ async function pickPhoto(): Promise<string | null> {
 async function takePhoto(): Promise<string | null> {
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   if (status !== "granted") return null;
-  const result = await ImagePicker.launchCameraAsync({ quality: 0.4, base64: true, mediaTypes: ["images"] });
+  const result = await ImagePicker.launchCameraAsync({ quality: 0.3, base64: true, mediaTypes: ["images"] });
   if (result.canceled || !result.assets[0]) return null;
   if (result.assets[0].base64) return result.assets[0].base64;
   const uri = result.assets[0].uri;
@@ -312,6 +314,7 @@ function PostCard({
   isFollowing,
   onComments,
   onProfile,
+  onRepost,
 }: {
   post: Post;
   onLike: (id: number) => void;
@@ -321,6 +324,7 @@ function PostCard({
   isFollowing: boolean;
   onComments: (post: Post) => void;
   onProfile: (name: string) => void;
+  onRepost: (post: Post) => void;
 }) {
   const [viewingImage, setViewingImage] = useState(false);
   const stageColor = STAGE_COLORS[post.stage] || C.tint;
@@ -357,6 +361,12 @@ function PostCard({
         )}
       </View>
 
+      {post.shared_from && (
+        <View style={cardStyles.sharedFromRow}>
+          <Ionicons name="arrow-redo" size={13} color={C.tint} />
+          <Text style={cardStyles.sharedFromText}>Shared from @{post.shared_from}</Text>
+        </View>
+      )}
       <Text style={cardStyles.title}>{post.title}</Text>
       <View style={cardStyles.tagsRow}>
         {post.strain !== "Unknown" && (
@@ -396,6 +406,9 @@ function PostCard({
         <Pressable style={cardStyles.actionBtn} onPress={() => onComments(post)}>
           <Ionicons name="chatbubble-outline" size={20} color={C.textMuted} />
           <Text style={cardStyles.actionCount}>{post.comments_count || ""}</Text>
+        </Pressable>
+        <Pressable style={cardStyles.actionBtn} onPress={() => onRepost(post)}>
+          <Ionicons name="arrow-redo-outline" size={20} color={C.textMuted} />
         </Pressable>
         <Pressable style={cardStyles.actionBtn} onPress={handleShare}>
           <Ionicons name="share-outline" size={20} color={C.textMuted} />
@@ -829,6 +842,43 @@ export default function CommunityScreen() {
     } catch {}
   };
 
+  const handleRepost = async (post: Post) => {
+    if (!myName) {
+      Alert.alert("Set Name", "Please create a post first to set your grower name.");
+      return;
+    }
+    Alert.alert("Share to Feed", `Repost "${post.title}" by ${post.grower_name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Repost",
+        onPress: async () => {
+          try {
+            const deviceId = await getDeviceId();
+            const url = new URL("/api/community/posts", getApiUrl());
+            await globalThis.fetch(url.toString(), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                growerName: myName,
+                strain: post.strain,
+                stage: post.stage,
+                title: post.title,
+                description: post.description,
+                imageBase64: post.image_base64 || null,
+                deviceId,
+                shared_from: post.grower_name,
+                original_post_id: post.id,
+              }),
+            });
+            fetchPosts(true);
+          } catch {
+            Alert.alert("Error", "Failed to repost. Please try again.");
+          }
+        },
+      },
+    ]);
+  };
+
   const handleDelete = async (postId: number) => {
     Alert.alert("Delete Post", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -954,6 +1004,7 @@ export default function CommunityScreen() {
                 isFollowing={following.has(post.grower_name)}
                 onComments={setCommentPost}
                 onProfile={setProfileName}
+                onRepost={handleRepost}
               />
             ))}
           </View>
@@ -1034,6 +1085,8 @@ const cardStyles = StyleSheet.create({
   tag: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: C.tint + "15", borderWidth: 1, borderColor: C.tint + "33" },
   tagDot: { width: 6, height: 6, borderRadius: 3 },
   tagText: { fontFamily: "Nunito_600SemiBold", fontSize: 11, color: C.tint },
+  sharedFromRow: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingTop: 2, paddingBottom: 4 },
+  sharedFromText: { fontFamily: "Nunito_600SemiBold", fontSize: 12, color: C.tint },
   description: { fontFamily: "Nunito_400Regular", fontSize: 14, color: C.textSecondary, paddingHorizontal: 14, lineHeight: 21, marginBottom: 10 },
   postImage: { width: "100%", height: 240 },
   actions: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 10, gap: 4, borderTopWidth: 1, borderTopColor: C.cardBorder },
