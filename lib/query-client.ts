@@ -7,8 +7,13 @@ const AUTH_TOKEN_KEY = "phynix_auth_token";
 export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
 
-  export function getApiUrl(): string {
-  return "https://phynix.onrender.com";
+  if (!host) {
+    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+  }
+
+  let url = new URL(`https://phynix.onrender.com);
+
+  return url.href;
 }
   
 async function getAuthHeaders(): Promise<Record<string, string>> {
