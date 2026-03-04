@@ -90,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!imageBase64) return res.status(400).json({ error: "imageBase64 is required" });
 
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gemini-1.5-flash",
         messages: [
           {
             role: "system",
